@@ -29,6 +29,7 @@ const Login = {
     U.$('#lg-adminpw').value = Api.token();
     const m = U.$('#lg-msg'); m.hidden = !msg; m.textContent = msg || '';
     ['lg-pass', 'lg-newname', 'lg-newplace', 'lg-newpass', 'lg-bpass'].forEach(id => { U.$('#' + id).value = ''; });   // 登出後不殘留上一次輸入
+    App.loadMarquee();
     await Login.load();
   },
   hide() { U.$('#login').hidden = true; document.body.classList.remove('logged-out'); },

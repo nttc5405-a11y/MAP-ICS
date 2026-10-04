@@ -87,7 +87,7 @@ var WRITE_ACTIONS = {
 // 手機掃 QR 加入時還沒有個人權杖，改用「案件編號＋加入碼」驗證
 // 手機端的 field* 與 getMyStatus/getFieldData 不用管理權杖，改在函式內以個人權杖 memberToken 驗證
 var PUBLIC_ACTIONS = { getJoinInfo: 1, joinCase: 1, joinAsTemp: 1, getMyStatus: 1, getFieldData: 1, fieldTaskStatus: 1, fieldReport: 1, fieldPhoto: 1, fieldCasualty: 1,
-  getBoardVersion: 1, getBoardData: 1, listCases: 1, enterCase: 1 };
+  getBoardVersion: 1, getBoardData: 1, listCases: 1, enterCase: 1, getSettings: 1 };
 // 只有管理員密碼（權杖）能做的操作；其餘「案件內」的操作，管理員密碼或該案件的驗證碼任一通過即可
 var ADMIN_ONLY = { createCase: 1, saveRoster: 1 };
 
@@ -142,7 +142,7 @@ function doPost(e) {
   }
 
   var handlers = {
-    ping: ping_, listCases: listCases_, enterCase: enterCase_, getCase: getCase_, getVersion: getVersion_, getLog: getLog_,
+    ping: ping_, getSettings: getSettings_, listCases: listCases_, enterCase: enterCase_, getCase: getCase_, getVersion: getVersion_, getLog: getLog_,
     createCase: createCase_, updateCase: updateCase_, saveZone: saveZone_, saveZones: saveZones_, deleteZone: deleteZone_,
     getRoster: getRoster_, saveRoster: saveRoster_, saveUnit: saveUnit_, deleteUnit: deleteUnit_, addMember: addMember_,
     approveMember: approveMember_, setMemberGroup: setMemberGroup_, revokeMember: revokeMember_, regenJoinCode: regenJoinCode_,
@@ -279,6 +279,28 @@ function logEvent_(ss, actor, action, target, content) {
  * 動作：讀取
  * ===================================================================== */
 function ping_() { return { mode: 'gas', version: BACKEND_VERSION, time: nowStr_() }; }
+
+/** 跑馬燈等系統設定：存在總表「設定」分頁（參數名稱／值），改了立刻生效、不用重新部署。
+ *  缺少的參數會自動補上預設列，方便直接在試算表修改。 */
+var SETTING_KEYS = { text: '跑馬燈文字', seconds: '跑馬燈秒數(3-120)' };
+function getSettings_() {
+  var sh = master_().getSheetByName('設定');
+  var map = {};
+  readAll_(sh, [['k', '參數名稱'], ['v', '值']]).forEach(function (r) { map[r.k] = r.v; });
+  var missing = [];
+  if (!(SETTING_KEYS.text in map)) missing.push({ k: SETTING_KEYS.text, v: '' });
+  if (!(SETTING_KEYS.seconds in map)) missing.push({ k: SETTING_KEYS.seconds, v: '18' });
+  if (missing.length) {
+    var lock = LockService.getScriptLock();
+    if (lock.tryLock(3000)) {
+      try { appendRows_(sh, [['k', '參數名稱'], ['v', '值']], missing); } finally { lock.releaseLock(); }
+    }
+  }
+  var sec = parseInt(map[SETTING_KEYS.seconds], 10);
+  if (!(sec >= 3)) sec = 18;
+  if (sec > 120) sec = 120;
+  return { marqueeText: String(map[SETTING_KEYS.text] || '').trim(), marqueeSeconds: sec };
+}
 
 /** 登入頁用的案件清單：沒有管理員密碼時只給基本資料（不含任何驗證碼／連結） */
 function listCases_(req) {

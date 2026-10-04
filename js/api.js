@@ -131,6 +131,8 @@ const Api = {
       case 'ping':
         return { mode: 'local', version: CFG.VERSION, time: U.now() };
 
+      case 'getSettings':   // 本機試用：固定顯示一段示範公告，讓你看到跑馬燈的效果
+        return { marqueeText: '【示範公告】正式使用時，請在 Google 試算表「設定」分頁修改跑馬燈文字與速度。', marqueeSeconds: 18 };
       case 'enterCase': {   // 本機試用也模擬驗證碼檢查
         const c = findCase(p.caseId);
         if (c.passcode && String(p.passcode || '') !== c.passcode) throw new Error('案件驗證碼錯誤');

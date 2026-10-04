@@ -11,6 +11,10 @@ const B = {
     document.addEventListener('keydown', e => { if (e.key === 'f' || e.key === 'F') B.fit(); });
     await B.load();
     setInterval(B.poll, 10000);
+    B.loadMarquee(); setInterval(B.loadMarquee, 60000);
+  },
+  async loadMarquee() {
+    try { const s = await B.call('getSettings'); U.marquee(document.getElementById('mq-board'), s.marqueeText, s.marqueeSeconds); } catch (e) { /* 不顯示 */ }
   },
   msg(html) { const m = document.getElementById('bmsg'); m.innerHTML = html; m.hidden = false; },
   tick() { document.getElementById('clock').textContent = U.now().slice(11); },

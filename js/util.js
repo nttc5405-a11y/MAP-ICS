@@ -233,6 +233,17 @@ U.triagePie = function (counts, size) {
     '<text x="' + cx + '" y="' + (cy + size * 0.12) + '" text-anchor="middle" font-size="' + (size * 0.36).toFixed(0) + '" font-weight="700" fill="#222">' + total + '</text></svg>';
 };
 
+/* 跑馬燈：el 內要有一個 <span>；text 空白就整條隱藏；seconds＝文字從右跑到左一趟的秒數 */
+U.marquee = function (el, text, seconds) {
+  if (!el) return;
+  const s = el.querySelector('span');
+  if (!text) { el.hidden = true; return; }
+  el.hidden = false;
+  s.textContent = text;
+  s.style.animation = 'none'; void s.offsetWidth;   // 重新開始動畫
+  s.style.animation = ''; s.style.animationDuration = Math.max(3, Math.min(120, Number(seconds) || 18)) + 's';
+};
+
 /* ---------- 介面輔助 ---------- */
 U.$ = (sel, root) => (root || document).querySelector(sel);
 U.$$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));

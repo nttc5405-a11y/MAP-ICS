@@ -13,7 +13,8 @@
 </head>
 <body>
 <div id="login" class="login" hidden>
-  <div class="login-card">
+  <div id="mq-login" class="marquee top" hidden><span></span></div>
+  <div class="login-card" style="margin-top:28px">
     <div class="login-title">🗺 案件管制系統</div>
     <div class="login-sub"><span id="lg-mode" class="mode-badge"></span></div>
     <div id="lg-msg" class="login-msg" hidden></div>
@@ -67,6 +68,7 @@
   <button id="btn-settings" class="top-btn" title="設定">⚙ 設定</button>
 </header>
 
+<div id="mq-main" class="marquee" hidden><span></span></div>
 <div id="main">
   <aside id="sidebar">
     <nav class="tabs">

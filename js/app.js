@@ -25,6 +25,7 @@ const App = {
     if (s) App.openCase(s.caseId).then(ok => { if (!ok) Login.show('登入已失效，請重新登入'); });
     else Login.show();
     App.pollTimer = setInterval(App.poll, CFG.POLL_MS);
+    App.loadMarquee(); setInterval(App.loadMarquee, 5 * 60 * 1000);   // 公告每 5 分鐘更新一次
     window.addEventListener('resize', U.debounce(() => MapView.invalidate(), 200));
   },
 
@@ -231,6 +232,15 @@ const App = {
         [r.time, r.actor, r.action, r.target, r.content].map(x => '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"').join(','))).join('\r\n');
       U.download(U.safeFile(App.state.cur.id + '_時序表') + '.csv', '﻿' + csv, 'text/csv');   // BOM 讓 Excel 正確顯示中文
     }
+  },
+
+  /* 跑馬燈公告（文字與速度存在總表「設定」分頁） */
+  async loadMarquee() {
+    try {
+      const s = await Api.call('getSettings');
+      U.marquee(U.$('#mq-login'), s.marqueeText, s.marqueeSeconds);
+      U.marquee(U.$('#mq-main'), s.marqueeText, s.marqueeSeconds);
+    } catch (e) { /* 公告抓不到就不顯示，不影響使用 */ }
   },
 
   /* 指揮所登入連結：網址後面帶 #token=權杖，開啟時存進這個瀏覽器並立刻從網址列移除。
