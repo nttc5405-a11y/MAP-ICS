@@ -13,7 +13,6 @@ const App = {
     Tasks.bind();
     Casualties.bind();
     Mountain.bind();
-    Viewshed.bind();
     App.bindUi();
     App.updateModeBadge();
     Zones.renderList();
