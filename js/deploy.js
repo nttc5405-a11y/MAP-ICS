@@ -354,10 +354,11 @@ const Deploy = {
     const html = '<div class="form">' +
       (roster.sample ? '<div class="warn">目前是範例名冊（虛構姓名）。請貼上實際資料後儲存。</div>' : '') +
       '<div class="hint">一行一筆，欄位用逗號或 Tab 分隔（可直接從 Excel 複製貼上）。<b>只貼人員也可以</b>：人員表裡出現的單位會自動建立；單位表是選填，只在要設定類別（分隊／義消／外部支援）或車輛時才需要。</div>' +
-      '<label>單位（選填）：名稱, 類別（分隊／義消／外部支援）, 車輛<textarea id="ro-units" rows="7" spellcheck="false">' + U.esc(uText) + '</textarea></label>' +
-      '<div class="file-row">或從檔案載入單位（CSV／TXT）：<input type="file" accept=".csv,.txt,.tsv" data-fill="ro-units"></div>' +
-      '<label>人員：單位, 姓名, 職務　<span class="hint">（ID 由系統自動產生）</span><textarea id="ro-people" rows="10" spellcheck="false">' + U.esc(pText) + '</textarea></label>' +
+'<label>人員：單位, 姓名, 職務　<span class="hint">（ID 由系統自動產生）</span><textarea id="ro-people" rows="10" spellcheck="false">' + U.esc(pText) + '</textarea></label>' +
       '<div class="file-row">或從檔案載入人員（CSV／TXT）：<input type="file" accept=".csv,.txt,.tsv" data-fill="ro-people"></div>' +
+      '<details class="adv"><summary>進階：單位類別與車輛（一般不用填）</summary>' +
+      '<label>單位：名稱, 類別（分隊／義消／外部支援）, 車輛<textarea id="ro-units" rows="7" spellcheck="false">' + U.esc(uText) + '</textarea></label>' +
+      '<div class="file-row">或從檔案載入單位（CSV／TXT）：<input type="file" accept=".csv,.txt,.tsv" data-fill="ro-units"></div></details>' +
       '<div class="hint">儲存會取代整份名冊，不影響已建立案件中的人員與部署。</div></div>';
     const v = await U.modal({
       title: '名冊管理', html: html, wide: true,

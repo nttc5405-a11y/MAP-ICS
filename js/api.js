@@ -9,7 +9,11 @@ const Api = {
   KEY_DB: 'ccs_local_db',
 
   // 優先用「設定」裡自己填的網址，沒有就用 config.js 內建的 GAS_URL
-  gasUrl() { return (U.store.get(Api.KEY_URL, '') || '').trim() || (CFG.GAS_URL || '').trim(); },
+  // 網址後面加 ?local=1 可強制進入本機試用模式（練習用，不會碰到真實資料）
+  gasUrl() {
+    if (/[?&]local=1/.test(location.search)) return '';
+    return (U.store.get(Api.KEY_URL, '') || '').trim() || (CFG.GAS_URL || '').trim();
+  },
   token() { return (U.store.get(Api.KEY_TOKEN, '') || '').trim(); },
   actor() { return (U.store.get(Api.KEY_ACTOR, '') || '').trim() || '指揮所'; },
   isLocal() { return !Api.gasUrl(); },
@@ -21,8 +25,12 @@ const Api = {
   },
 
   /* ---------- GAS ---------- */
+  casePass() { try { const s = JSON.parse(U.store.get('ccs_session', '')); return (s && s.pass) || ''; } catch (e) { return ''; } },
   remote(action, params) {
-    const body = JSON.stringify(Object.assign({ action: action, token: Api.token() }, params));
+    // 管理員密碼（權杖）與案件驗證碼各自帶上；伺服器任一個通過即可（建立案件／改名冊只認管理員密碼）
+    const tk = params._token || Api.token();
+    params = Object.assign({}, params); delete params._token;
+    const body = JSON.stringify(Object.assign({ action: action, token: tk, casePass: Api.casePass() }, params));
     return fetch(Api.gasUrl(), {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // 避開 CORS preflight
@@ -123,6 +131,11 @@ const Api = {
       case 'ping':
         return { mode: 'local', version: CFG.VERSION, time: U.now() };
 
+      case 'enterCase': {   // 本機試用也模擬驗證碼檢查
+        const c = findCase(p.caseId);
+        if (c.passcode && String(p.passcode || '') !== c.passcode) throw new Error('案件驗證碼錯誤');
+        return { case: c };
+      }
       case 'listCases':
         return d.cases.slice().sort((a, b) => (a.id < b.id ? 1 : -1));
 
@@ -135,7 +148,7 @@ const Api = {
           id: day + '-' + ('00' + n).slice(-3), name: f.name.trim(), type: f.type || '其他', place: f.place || '',
           lat: f.lat == null ? '' : f.lat, lng: f.lng == null ? '' : f.lng, commander: f.commander || '',
           status: CFG.STATUS_OPEN, start: U.now(), end: '', note: f.note || '',
-          sheetId: 'local', folderId: 'local', joinCode: String(Math.floor(100000 + Math.random() * 900000)), viewCode: '',
+          sheetId: 'local', folderId: 'local', joinCode: String(Math.floor(100000 + Math.random() * 900000)), viewCode: '', passcode: String(f.passcode || ''),
           version: 1, updated: U.now()
         };
         d.cases.push(c); d.zones[c.id] = []; log(c.id, p.actor, '建立案件', c.id, c.name);
@@ -144,7 +157,7 @@ const Api = {
 
       case 'updateCase': {
         const c = findCase(p.caseId); const f = p.fields || {};
-        ['name', 'type', 'place', 'lat', 'lng', 'commander', 'note'].forEach(k => { if (k in f) c[k] = f[k]; });
+        ['name', 'type', 'place', 'lat', 'lng', 'commander', 'note', 'passcode'].forEach(k => { if (k in f) c[k] = f[k]; });
         if ('status' in f && f.status !== c.status) {
           c.status = f.status;
           if (f.status === CFG.STATUS_CLOSED) c.end = U.now();
@@ -497,7 +510,7 @@ const Api = {
       /* ---------- 第 6 階段：唯讀看板（以檢視碼 viewCode 驗證，只回傳不含個資的資料） ---------- */
       case 'regenViewCode': {
         const c = findCase(p.caseId);
-        c.viewCode = p.disable ? '' : U.uid('V').toLowerCase() + Math.random().toString(36).slice(2, 8);
+        c.viewCode = p.disable ? '' : Math.random().toString(36).slice(2, 10).toUpperCase().padEnd(8, 'X');   // 8 碼短碼，方便在登入頁輸入
         log(c.id, p.actor, p.disable ? '關閉唯讀看板連結' : '產生唯讀看板連結', c.id, '');
         touch(c); Api.saveDb(d); return { viewCode: c.viewCode, version: c.version };
       }

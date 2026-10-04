@@ -74,8 +74,7 @@ const Mountain = {
         (z.hazard ? '<div class="zi-haz">⚠ ' + U.esc(z.hazard) + '</div>' : '') +
         '<div class="ui-sub">' + (a && a.units && a.units.length ? '指派：' + U.esc(a.units.map(Mountain.unitName).join('、')) + (a.method ? '（' + U.esc(a.method) + '）' : '') : '<i>尚未指派隊伍（搜救計畫）</i>') + '</div>' +
         (cv ? '<div class="cov-bar"><i style="width:' + cv.pct + '%"></i><span>覆蓋率約 ' + cv.pct + '%（估算，依 ' + cv.n + ' 條搜索軌跡）</span></div>' : '') +
-        '<div class="ui-btns"><button class="btn small" data-act="focus">定位</button><button class="btn small" data-act="cov">估算覆蓋率</button>' +
-        (ro ? '' : '<button class="btn small" data-act="edit">編輯</button>') + '</div></div>';
+        '<div class="ui-btns"><button class="btn small" data-act="focus">定位</button><button class="btn small" data-act="cov">估算覆蓋率</button></div></div>';
     }).join('') + '</div>';
     box.innerHTML = html;
   },
@@ -83,7 +82,6 @@ const Mountain = {
     const it = e.target.closest('.seg-item'), b = e.target.closest('[data-act]'); if (!it || !b) return;
     const id = it.dataset.id;
     if (b.dataset.act === 'focus') MapView.focusZone(id);
-    else if (b.dataset.act === 'edit') Zones.edit(id);
     else if (b.dataset.act === 'cov') {
       const r = Mountain.estimate(id);
       if (r.error) { U.toast(r.error, 'err'); return; }

@@ -12,6 +12,51 @@
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+<div id="login" class="login" hidden>
+  <div class="login-card">
+    <div class="login-title">🗺 案件管制系統</div>
+    <div class="login-sub"><span id="lg-mode" class="mode-badge"></span></div>
+    <div id="lg-msg" class="login-msg" hidden></div>
+
+    <div class="lg lg-gray">
+      <label for="lg-name">👤 您的姓名（登入一次，之後自動帶入）</label>
+      <input id="lg-name" type="text" maxlength="20" autocomplete="name" placeholder="例：王小明">
+    </div>
+
+    <div class="lg lg-blue">
+      <h3>🔑 進入既有案件</h3>
+      <select id="lg-case"></select>
+      <label class="chk"><input id="lg-closed" type="checkbox"> 也顯示已結案的案件</label>
+      <input id="lg-pass" type="text" autocomplete="off" placeholder="案件驗證碼">
+      <div id="lg-admin-hint" class="hint" hidden>此瀏覽器已儲存管理員密碼，驗證碼可以留空。</div>
+      <button id="lg-enter" class="lg-btn blue">登入</button>
+    </div>
+
+    <div class="lg lg-green">
+      <h3>🆕 建立新案件</h3>
+      <input id="lg-newname" type="text" maxlength="60" placeholder="案件名稱（例：1005 隆昌山難搜救）">
+      <div class="row2">
+        <select id="lg-newtype"><option>山域</option><option>水域</option><option>火警</option><option>化災</option><option>其他</option></select>
+        <input id="lg-newplace" type="text" maxlength="60" placeholder="地點（選填）">
+      </div>
+      <input id="lg-newpass" type="text" autocomplete="off" placeholder="設定案件驗證碼（至少 4 個字元）">
+      <input id="lg-adminpw" type="password" autocomplete="off" placeholder="管理員密碼（管理權杖）">
+      <button id="lg-create" class="lg-btn green">建立並登入</button>
+      <div class="hint">建立後請把驗證碼告知要進入的同仁。</div>
+    </div>
+
+    <div class="lg lg-purple">
+      <h3>📺 只看看板（唯讀，投電視用）</h3>
+      <select id="lg-bcase"></select>
+      <input id="lg-bpass" type="text" autocomplete="off" placeholder="看板檢視碼">
+      <button id="lg-board" class="lg-btn purple">開啟看板</button>
+      <div class="hint">檢視碼由案件指揮所在「工具 → 唯讀看板」產生。</div>
+    </div>
+
+    <div class="login-foot"><button id="lg-settings" class="link-btn">⚙ 連線設定</button></div>
+  </div>
+</div>
+
 <header id="topbar">
   <button id="btn-sidebar" class="top-btn" title="收合／展開側欄">☰</button>
   <div class="brand">案件管制系統<small>指揮所版</small></div>
@@ -36,18 +81,7 @@
 
     <section id="pane-cases" class="pane active">
       <div id="case-current" class="case-current" hidden></div>
-      <div class="pane-bar">
-        <button id="btn-new-case" class="btn primary">＋ 新建案件</button>
-      </div>
-      <div class="pane-bar">
-        <select id="case-status">
-          <option value="進行中">進行中</option>
-          <option value="已結案">已結案</option>
-          <option value="">全部</option>
-        </select>
-        <input id="case-search" type="search" placeholder="搜尋編號、名稱、地點">
-      </div>
-      <div id="case-list" class="list"></div>
+      <div class="hint pad">要切換案件或建立新案件，請按「離開案件（登出）」回到登入頁。</div>
     </section>
 
     <section id="pane-zones" class="pane">
@@ -154,6 +188,7 @@
 <script src="js/map.js"></script>
 <script src="js/zones.js"></script>
 <script src="js/cases.js"></script>
+<script src="js/login.js"></script>
 <script src="js/deploy.js"></script>
 <script src="js/tasks.js"></script>
 <script src="js/casualty.js"></script>

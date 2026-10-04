@@ -30,14 +30,7 @@ const Cases = {
       '<div class="ci-sub">' + U.esc(c.place || '（未填地點）') + (c.commander ? '・指揮官 ' + U.esc(c.commander) : '') + '</div></div>').join('');
   },
 
-  bindList() {
-    U.$('#case-list').addEventListener('click', e => {
-      const it = e.target.closest('.case-item'); if (it) App.openCase(it.dataset.id);
-    });
-    U.$('#case-status').addEventListener('change', e => { Cases.statusFilter = e.target.value; Cases.renderList(); });
-    U.$('#case-search').addEventListener('input', e => { Cases.keyword = e.target.value; Cases.renderList(); });
-    U.$('#btn-new-case').addEventListener('click', () => Cases.openForm(null));
-  },
+  bindList() { /* 案件清單與建案已移到登入頁（js/login.js） */ },
 
   /* 目前案件資訊卡（案件分頁最上方） */
   renderCurrent() {
@@ -56,7 +49,7 @@ const Cases = {
       (c.status === CFG.STATUS_OPEN
         ? '<button class="btn small danger" id="cc-close">結案</button>'
         : '<button class="btn small primary" id="cc-reopen">重新開啟</button>') +
-      '<button class="btn small" id="cc-leave">離開案件</button></div></div>';
+      '<button class="btn small" id="cc-leave">離開案件（登出）</button></div></div>';
     U.$('#cc-edit').onclick = () => Cases.openForm(c);
     U.$('#cc-leave').onclick = () => App.leaveCase();
     const cl = U.$('#cc-close'), ro = U.$('#cc-reopen');
@@ -90,6 +83,7 @@ const Cases = {
       '<label>地點<input id="cf-place" type="text" maxlength="80" value="' + U.esc(c.place) + '" placeholder="例：成功鎮隆昌山區"></label>' +
       '<label>座標（選填）<input id="cf-coord" type="text" value="' + U.esc(coordVal) + '" placeholder="WGS84「緯度, 經度」或 TWD97「東, 北」"></label>' +
       '<div class="hint" id="cf-coord-hint">兩個數字都大於 1000 會當作 TWD97，否則當作 WGS84。</div>' +
+      '<label>案件驗證碼（進入案件用，至少 4 個字元）<input id="cf-pass" type="text" maxlength="30" value="' + U.esc(c.passcode) + '" placeholder="' + (isNew ? '' : '舊案件請在這裡設定') + '"></label>' +
       '<label>備註<textarea id="cf-note" rows="3" maxlength="500">' + U.esc(c.note) + '</textarea></label></div>';
     const v = await U.modal({
       title: isNew ? '新建案件' : '編輯案件資料', html: html,
@@ -101,6 +95,7 @@ const Cases = {
             name: U.$('#cf-name', el).value.trim(), type: U.$('#cf-type', el).value,
             commander: U.$('#cf-cmd', el).value.trim(), place: U.$('#cf-place', el).value.trim(),
             note: U.$('#cf-note', el).value.trim(),
+            passcode: U.$('#cf-pass', el).value.trim(),
             lat: r ? +r.lat.toFixed(6) : '', lng: r ? +r.lng.toFixed(6) : ''
           };
         },
@@ -108,6 +103,8 @@ const Cases = {
           if (!U.$('#cf-name', el).value.trim()) { U.toast('請填寫案件名稱', 'err'); return false; }
           const cs = U.$('#cf-coord', el).value.trim();
           if (cs && !U.parseCoord(cs)) { U.toast('座標格式看不懂，請檢查', 'err'); return false; }
+          const ps = U.$('#cf-pass', el).value.trim();
+          if (ps && ps.length < 4) { U.toast('案件驗證碼至少 4 個字元', 'err'); return false; }
         }
       }],
       onOpen: el => {
@@ -127,7 +124,9 @@ const Cases = {
         U.toast('已建立案件 ' + nc.id, 'ok');
         await App.openCase(nc.id);
       } else {
+        if (!v.passcode) delete v.passcode;
         const uc = await App.run(() => Api.call('updateCase', { caseId: c.id, fields: v }));
+        if (v.passcode) Login.save(c.id, v.passcode);   // 自己改了驗證碼，登入狀態跟著更新
         App.applyCase(uc);
         await Cases.load();
         U.toast('案件資料已更新', 'ok');

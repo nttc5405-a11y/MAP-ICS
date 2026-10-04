@@ -19,7 +19,7 @@ function rootFolderId_() {
 var CASE_FIELDS = [
   ['id', '案件編號'], ['name', '案件名稱'], ['type', '類型'], ['place', '地點'], ['lat', '緯度'], ['lng', '經度'],
   ['commander', '指揮官'], ['status', '狀態'], ['start', '開始時間'], ['end', '結束時間'], ['note', '備註'],
-  ['sheetId', '試算表ID'], ['folderId', '資料夾ID'], ['joinCode', '加入碼'], ['version', '版本'], ['updated', '最後更新'], ['viewCode', '檢視碼']
+  ['sheetId', '試算表ID'], ['folderId', '資料夾ID'], ['joinCode', '加入碼'], ['version', '版本'], ['updated', '最後更新'], ['viewCode', '檢視碼'], ['passcode', '驗證碼']
 ];
 var ZONE_FIELDS = [
   ['id', '區域ID'], ['name', '名稱'], ['category', '類別'], ['color', '顏色'], ['geomType', '幾何類型'],
@@ -87,7 +87,9 @@ var WRITE_ACTIONS = {
 // 手機掃 QR 加入時還沒有個人權杖，改用「案件編號＋加入碼」驗證
 // 手機端的 field* 與 getMyStatus/getFieldData 不用管理權杖，改在函式內以個人權杖 memberToken 驗證
 var PUBLIC_ACTIONS = { getJoinInfo: 1, joinCase: 1, joinAsTemp: 1, getMyStatus: 1, getFieldData: 1, fieldTaskStatus: 1, fieldReport: 1, fieldPhoto: 1, fieldCasualty: 1,
-  getBoardVersion: 1, getBoardData: 1 };
+  getBoardVersion: 1, getBoardData: 1, listCases: 1, enterCase: 1 };
+// 只有管理員密碼（權杖）能做的操作；其餘「案件內」的操作，管理員密碼或該案件的驗證碼任一通過即可
+var ADMIN_ONLY = { createCase: 1, saveRoster: 1 };
 
 /* =====================================================================
  * 第一次使用：在編輯器選 setup 按「執行」。會建立工作表、根資料夾與管理權杖。
@@ -132,10 +134,15 @@ function doPost(e) {
   try { req = JSON.parse(e.postData.contents); } catch (err) { return json_({ ok: false, error: '請求格式錯誤' }); }
   var saved = PropertiesService.getScriptProperties().getProperty('API_TOKEN');
   if (!saved) return json_({ ok: false, error: '後端尚未初始化，請先在編輯器執行 setup()' });
-  if (!PUBLIC_ACTIONS[req.action] && !safeEqual_(String(req.token || ''), saved)) return json_({ ok: false, error: '權杖錯誤或未填寫，請到「設定」檢查' });
+  var isAdmin = safeEqual_(String(req.token || ''), saved);
+  req._admin = isAdmin;
+  if (!PUBLIC_ACTIONS[req.action] && !isAdmin) {
+    if (ADMIN_ONLY[req.action]) return json_({ ok: false, error: '此操作需要管理員密碼（權杖）。權杖錯誤或未填寫' });
+    if (!casePassOk_(req)) return json_({ ok: false, error: '案件驗證碼錯誤或已失效，請重新登入' });
+  }
 
   var handlers = {
-    ping: ping_, listCases: listCases_, getCase: getCase_, getVersion: getVersion_, getLog: getLog_,
+    ping: ping_, listCases: listCases_, enterCase: enterCase_, getCase: getCase_, getVersion: getVersion_, getLog: getLog_,
     createCase: createCase_, updateCase: updateCase_, saveZone: saveZone_, saveZones: saveZones_, deleteZone: deleteZone_,
     getRoster: getRoster_, saveRoster: saveRoster_, saveUnit: saveUnit_, deleteUnit: deleteUnit_, addMember: addMember_,
     approveMember: approveMember_, setMemberGroup: setMemberGroup_, revokeMember: revokeMember_, regenJoinCode: regenJoinCode_,
@@ -273,10 +280,30 @@ function logEvent_(ss, actor, action, target, content) {
  * ===================================================================== */
 function ping_() { return { mode: 'gas', version: BACKEND_VERSION, time: nowStr_() }; }
 
-function listCases_() {
-  var all = readAll_(indexSheet_(), CASE_FIELDS).map(caseOut_);
+/** 登入頁用的案件清單：沒有管理員密碼時只給基本資料（不含任何驗證碼／連結） */
+function listCases_(req) {
+  var all = readAll_(indexSheet_(), CASE_FIELDS).map(function (c) {
+    if (req._admin) return caseOut_(c);
+    return { id: c.id, name: c.name, type: c.type, place: c.place, status: c.status, start: c.start, end: c.end };
+  });
   all.sort(function (a, b) { return a.id < b.id ? 1 : -1; });
   return all;
+}
+function casePassOk_(req) {
+  if (!req.caseId) return false;
+  var c;
+  try { c = findCase_(req.caseId); } catch (e) { return false; }
+  return !!c.passcode && safeEqual_(String(req.casePass || ''), c.passcode);
+}
+/** 進入案件：管理員密碼或案件驗證碼通過才放行；錯誤時稍微延遲，降低被連續猜測的速度 */
+function enterCase_(req) {
+  var c;
+  try { c = findCase_(req.caseId); } catch (e) { throw new Error('找不到這個案件'); }
+  if (!req._admin && (!c.passcode || !safeEqual_(String(req.passcode || ''), c.passcode))) {
+    Utilities.sleep(800);
+    throw new Error(c.passcode ? '案件驗證碼錯誤' : '這個案件還沒有設定驗證碼，請由管理員登入後到「案件 → 編輯資料」設定');
+  }
+  return { case: caseOut_(c) };
 }
 
 function getCase_(req) {
@@ -317,6 +344,8 @@ function createCase_(req) {
   var f = req.fields || {};
   var name = String(f.name || '').trim();
   if (!name) throw new Error('請填寫案件名稱');
+  var pass = String(f.passcode || '').trim();
+  if (pass.length < 4) throw new Error('請設定案件驗證碼（至少 4 個字元）');
   var rootId = rootFolderId_();
   if (!rootId) throw new Error('後端尚未初始化，請先執行 setup()');
 
@@ -339,7 +368,7 @@ function createCase_(req) {
     id: id, name: name, type: f.type || '其他', place: f.place || '', lat: f.lat == null ? '' : f.lat, lng: f.lng == null ? '' : f.lng,
     commander: f.commander || '', status: '進行中', start: nowStr_(), end: '', note: f.note || '',
     sheetId: ss.getId(), folderId: folder.getId(), joinCode: String(100000 + Math.floor(Math.random() * 900000)),
-    version: '1', updated: nowStr_()
+    version: '1', updated: nowStr_(), viewCode: '', passcode: pass
   };
   appendRows_(idx, CASE_FIELDS, [c]);
   logEvent_(ss, req.actor, '建立案件', id, name);
@@ -350,7 +379,8 @@ function createCase_(req) {
 function updateCase_(req) {
   var c = findCase_(req.caseId), f = req.fields || {};
   var ss = caseSs_(c), changed = [];
-  ['name', 'type', 'place', 'lat', 'lng', 'commander', 'note'].forEach(function (k) {
+  if ('passcode' in f && String(f.passcode).trim().length < 4) throw new Error('案件驗證碼至少 4 個字元');
+  ['name', 'type', 'place', 'lat', 'lng', 'commander', 'note', 'passcode'].forEach(function (k) {
     if (k in f) { c[k] = f[k] == null ? '' : String(f[k]); changed.push(k); }
   });
   if ('status' in f && f.status !== c.status) {
@@ -925,7 +955,7 @@ function deletePlan_(req) {
  * ===================================================================== */
 function regenViewCode_(req) {
   var c = openCaseForWrite_(req.caseId), ss = caseSs_(c);
-  c.viewCode = req.disable ? '' : (Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '').slice(0, 6));
+  c.viewCode = req.disable ? '' : Utilities.getUuid().replace(/-/g, '').slice(0, 8).toUpperCase();   // 8 碼短碼，方便在登入頁輸入
   writeRow_(indexSheet_(), CASE_FIELDS, c._row, c);
   logEvent_(ss, req.actor, req.disable ? '關閉唯讀看板連結' : '產生唯讀看板連結', c.id, '');
   return { viewCode: c.viewCode, version: bump_(c) };

@@ -19,10 +19,11 @@ const App = {
     Zones.renderList();
     Cases.renderCurrent();
     App.switchTab('cases');
-    Cases.load().then(() => {
-      const last = U.store.get('ccs_last_case', '');
-      if (last && App.state.cases.some(c => c.id === last)) App.openCase(last);
-    });
+    Login.bind();
+    // 有登入紀錄就直接回到上次的案件；驗證碼失效或案件不存在就回登入頁
+    const s = Login.session();
+    if (s) App.openCase(s.caseId).then(ok => { if (!ok) Login.show('登入已失效，請重新登入'); });
+    else Login.show();
     App.pollTimer = setInterval(App.poll, CFG.POLL_MS);
     window.addEventListener('resize', U.debounce(() => MapView.invalidate(), 200));
   },
@@ -54,7 +55,7 @@ const App = {
 
   /* 需要先進入案件；forWrite=true 時案件不能是結案狀態 */
   needCase(forWrite) {
-    if (!App.state.cur) { U.toast('請先在「案件」分頁選一個案件', 'err'); return false; }
+    if (!App.state.cur) { U.toast('請先登入並進入案件', 'err'); return false; }
     if (forWrite && App.state.readonly) { U.toast('案件已結案，請先重新開啟再修改', 'err'); return false; }
     return true;
   },
@@ -92,9 +93,9 @@ const App = {
       Deploy.ensureRoster().then(() => Deploy.renderAll());   // 載入名冊後，臨時人員的「已在名冊」才會正確顯示
       MapView.fitAll();
       U.store.set('ccs_last_case', id);
-      Cases.renderList();
       App.switchTab('zones');
-    } catch (e) { U.toast('開啟案件失敗：' + e.message, 'err'); }
+      return true;
+    } catch (e) { U.toast('開啟案件失敗：' + e.message, 'err'); return false; }
   },
   /* 把 getCase 的回傳放進狀態 */
   setData(r) {
@@ -130,10 +131,12 @@ const App = {
     App.state.roster = null; App.state.readonly = false; App.state.version = 0;
     MapView.clearAll(); MapView.setReadonly(false);
     U.store.del('ccs_last_case');
+    Login.clear();
     U.$('#case-ribbon').hidden = true;
     document.body.classList.remove('readonly');
-    Zones.renderList(); Deploy.renderAll(); Cases.renderCurrent(); Cases.renderList();
+    Zones.renderList(); Deploy.renderAll(); Cases.renderCurrent();
     App.switchTab('cases');
+    Login.show();
   },
   async reloadCase(force) {
     const c = App.state.cur; if (!c) return;
@@ -326,7 +329,7 @@ const App = {
     U.store.set(Api.KEY_URL, v.url);
     U.store.set(Api.KEY_TOKEN, v.token);
     App.updateModeBadge();
-    if (changed) { App.leaveCase(); App.state.cases = []; await Cases.load(); U.toast('已切換為' + Api.modeName(), 'ok'); }
+    if (changed) { App.leaveCase(); U.toast('已切換為' + Api.modeName(), 'ok'); }
     else U.toast('設定已儲存', 'ok');
   }
 };
