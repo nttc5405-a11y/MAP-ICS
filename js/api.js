@@ -45,7 +45,7 @@ const Api = {
     let d = null;
     try { d = JSON.parse(U.store.get(Api.KEY_DB, '')); } catch (e) { /* 重建 */ }
     if (!d || !d.cases) d = { cases: [], zones: {}, logs: {} };
-    ['units', 'members', 'tasks', 'reports', 'casualties'].forEach(k => { d[k] = d[k] || {}; });
+    ['units', 'members', 'tasks', 'reports', 'casualties', 'plans'].forEach(k => { d[k] = d[k] || {}; });
     if (!d.roster) d.roster = Api.sampleRoster();
     return d;
   },
@@ -157,7 +157,7 @@ const Api = {
         const c = findCase(p.caseId);
         return {
           case: c, zones: d.zones[c.id] || [], units: d.units[c.id] || [], members: d.members[c.id] || [],
-          tasks: d.tasks[c.id] || [], reports: d.reports[c.id] || [], casualties: d.casualties[c.id] || []
+          tasks: d.tasks[c.id] || [], reports: d.reports[c.id] || [], casualties: d.casualties[c.id] || [], plans: d.plans[c.id] || []
         };
       }
       case 'getVersion': {
@@ -468,6 +468,29 @@ const Api = {
         lst('casualties', a.c.id).push(rec);
         log(a.c.id, rec.reporter, '手機回報傷患', rec.id, Api.casLabel(rec));
         touch(a.c); Api.saveDb(d); return { casualty: rec, version: a.c.version };
+      }
+
+      /* ---------- 第 5 階段：登山計畫／搜救計畫 ---------- */
+      case 'savePlan': {
+        const c = findCase(p.caseId); needOpen(c);
+        const x = p.plan;
+        if (!x || !x.id) throw new Error('計畫資料缺少 ID');
+        if (x.type !== '登山計畫' && x.type !== '搜救計畫') throw new Error('計畫類型只能是「登山計畫」或「搜救計畫」');
+        if (String(x.content || '').length > CFG.CELL_MAX) throw new Error('計畫內容過大（超過 ' + CFG.CELL_MAX + ' 字元）');
+        const list = lst('plans', c.id), old = list.find(y => y.id === x.id);
+        const rec = Object.assign({}, old || {}, x, { updatedBy: p.actor, updated: U.now() });
+        if (!old && !rec.version) rec.version = String(list.filter(y => y.type === x.type).length + 1);
+        upsertList(list, rec);
+        log(c.id, p.actor, old ? '修改' + rec.type : '新增' + rec.type, rec.id, rec.type + ' v' + rec.version);
+        touch(c); Api.saveDb(d); return { plan: rec, version: c.version };
+      }
+      case 'deletePlan': {
+        const c = findCase(p.caseId); needOpen(c);
+        const list = lst('plans', c.id), i = list.findIndex(y => y.id === p.planId);
+        if (i < 0) throw new Error('找不到計畫');
+        const x = list.splice(i, 1)[0];
+        log(c.id, p.actor, '刪除' + x.type, x.id, x.type + ' v' + x.version);
+        touch(c); Api.saveDb(d); return { version: c.version };
       }
 
       default:

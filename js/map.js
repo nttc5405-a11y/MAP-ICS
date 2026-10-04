@@ -122,6 +122,10 @@ const MapView = {
     const color = z.color || CFG.catColor(z.category);
     const sel = z.id === this.selectedId;
     const style = { color: color, weight: sel ? 6 : 3, opacity: 1, fillColor: color, fillOpacity: 0.22 };
+    if (z.category === '搜索區') {
+      if (z.status === '已搜') { style.fillOpacity = 0.06; style.dashArray = '8 6'; }
+      else if (z.status === '搜索中') { style.fillOpacity = 0.38; style.weight = sel ? 7 : 5; }
+    }
     if (z.geomType === 'Point') {
       return L.marker([g.coordinates[1], g.coordinates[0]], { icon: this.pinIcon(color, (z.category || '?').charAt(0), sel) });
     }

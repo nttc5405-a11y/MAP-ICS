@@ -1,6 +1,6 @@
 /* 主程式：狀態、同步、設定、工具分頁 */
 const App = {
-  state: { cases: [], cur: null, zones: [], units: [], members: [], tasks: [], reports: [], casualties: [], roster: null, version: 0, readonly: false },
+  state: { cases: [], cur: null, zones: [], units: [], members: [], tasks: [], reports: [], casualties: [], plans: [], roster: null, version: 0, readonly: false },
   busy: 0,
   pollTimer: null,
 
@@ -12,6 +12,7 @@ const App = {
     Deploy.bind();
     Tasks.bind();
     Casualties.bind();
+    Mountain.bind();
     App.bindUi();
     App.updateModeBadge();
     Zones.renderList();
@@ -100,6 +101,7 @@ const App = {
     App.state.members = r.members || [];
     App.state.tasks = r.tasks || [];
     App.state.reports = r.reports || [];
+    App.state.plans = r.plans || [];
     App.state.casualties = (r.casualties || []).map(c => Object.assign(c, { red: +c.red || 0, yellow: +c.yellow || 0, green: +c.green || 0, black: +c.black || 0 }));
   },
   /* 案件資料有變（結案、改名…）時更新畫面 */
@@ -118,9 +120,10 @@ const App = {
       (App.state.readonly ? '　<span class="ro">【已結案・唯讀】</span>' : '');
     rb.hidden = false;
     document.body.classList.toggle('readonly', App.state.readonly);
+    Mountain.syncTab();
   },
   leaveCase() {
-    App.state.cur = null; App.state.zones = []; App.state.units = []; App.state.members = []; App.state.tasks = []; App.state.reports = []; App.state.casualties = [];
+    App.state.cur = null; App.state.zones = []; App.state.units = []; App.state.members = []; App.state.tasks = []; App.state.reports = []; App.state.casualties = []; App.state.plans = [];
     App.state.roster = null; App.state.readonly = false; App.state.version = 0;
     MapView.clearAll(); MapView.setReadonly(false);
     U.store.del('ccs_last_case');
@@ -179,9 +182,19 @@ const App = {
     const html = '<p>共 <b>' + res.zones.length + '</b> 個圖形，類別將設為「匯入資料」（匯入後可逐一改類別）。</p>' +
       (res.simplified ? '<p class="hint">其中 ' + res.simplified + ' 個因節點過多已自動簡化。</p>' : '') +
       '<ul class="plain">' + names + (res.zones.length > 12 ? '<li>…還有 ' + (res.zones.length - 12) + ' 個</li>' : '') + '</ul>' +
-      (res.skipped.length ? '<p class="warn">以下 ' + res.skipped.length + ' 項無法匯入：<br>' + res.skipped.slice(0, 8).map(U.esc).join('<br>') + '</p>' : '');
-    const ok = await U.modal({ title: '匯入 ' + file.name, html: html, buttons: [{ text: '取消', value: false }, { text: '全部匯入', cls: 'primary', value: true }] });
-    if (ok !== true) return;
+      (res.skipped.length ? '<p class="warn">以下 ' + res.skipped.length + ' 項無法匯入：<br>' + res.skipped.slice(0, 8).map(U.esc).join('<br>') + '</p>' : '') +
+      '<div class="form"><div class="row2"><label>匯入為<select id="im-cat">' +
+      ['匯入資料'].concat(CFG.TRACK_CATS).map(c => '<option' + (c === (App.importCat || '匯入資料') ? ' selected' : '') + '>' + c + '</option>').join('') + '</select></label>' +
+      '<label>隊伍（搜索軌跡用）<select id="im-team"><option value="">（不指定）</option>' + App.state.units.map(u => '<option value="' + U.esc(u.id) + '">' + U.esc(u.name) + '</option>').join('') + '</select></label></div>' +
+      '<div class="hint">計畫路線＝失蹤者原定行程；搜索軌跡＝隊伍實際走過（會算入搜索覆蓋範圍）；參考軌跡＝網路上的登山紀錄。</div></div>';
+    const ok = await U.modal({ title: '匯入 ' + file.name, html: html, buttons: [{ text: '取消', value: false }, { text: '全部匯入', cls: 'primary',
+      value: el => ({ cat: U.$('#im-cat', el).value, team: U.$('#im-team', el).value }) }] });
+    App.importCat = '';
+    if (!ok || typeof ok !== 'object') return;
+    res.zones.forEach(z => {
+      z.category = ok.cat; z.color = CFG.catColor(ok.cat);
+      if (ok.cat === '搜索軌跡') z.teamId = ok.team;
+    });
     try {
       const r = await App.run(() => Api.call('saveZones', {
         caseId: App.state.cur.id, zones: res.zones.map(Zones.clean), note: file.name

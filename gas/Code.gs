@@ -17,7 +17,8 @@ var CASE_FIELDS = [
 var ZONE_FIELDS = [
   ['id', '區域ID'], ['name', '名稱'], ['category', '類別'], ['color', '顏色'], ['geomType', '幾何類型'],
   ['radius', '半徑(m)'], ['geojson', 'GeoJSON'], ['measure', '量測'], ['hazard', '危險因子'], ['note', '備註'],
-  ['created', '建立時間'], ['updated', '更新時間']
+  ['created', '建立時間'], ['updated', '更新時間'],
+  ['priority', '優先序'], ['status', '搜索狀態'], ['terrain', '地形說明'], ['quality', '搜索品質說明'], ['teamId', '關聯單位ID'], ['segmentId', '關聯分區ID']
 ];
 var LOG_FIELDS = [
   ['time', '時間'], ['actor', '操作者'], ['action', '動作'], ['target', '對象ID'], ['content', '內容']
@@ -44,6 +45,10 @@ var CAS_FIELDS = [
   ['taskId', '任務ID'], ['status', '後送狀態'], ['vehicle', '後送車輛'], ['hospital', '送往醫院'], ['tFound', '發現時間'],
   ['tTreated', '處置時間'], ['tTransporting', '後送時間'], ['tArrived', '到院時間'], ['time', '建立時間']
 ];
+var PLAN_FIELDS = [
+  ['id', '計畫ID'], ['type', '類型'], ['version', '版本'], ['periodStart', '期間起'], ['periodEnd', '期間迄'],
+  ['content', '內容'], ['updatedBy', '更新者'], ['updated', '更新時間']
+];
 var ROSTER_UNIT_FIELDS = [['id', '單位ID'], ['name', '單位名稱'], ['category', '類別'], ['vehicles', '車輛'], ['order', '排序']];
 var ROSTER_PEOPLE_FIELDS = [['id', '人員ID'], ['unit', '單位'], ['name', '姓名'], ['title', '職務'], ['order', '排序'], ['active', '啟用']];
 var TASK_STATUS_TIME = { '已派遣': 'tAssigned', '已接收': 'tReceived', '已抵達': 'tArrived', '執行中': 'tRunning', '完成': 'tDone', '需支援': 'tSupport' };
@@ -61,14 +66,16 @@ var CASE_SHEETS = {
   '單位部署': UNIT_FIELDS.map(function (f) { return f[1]; }),
   '任務': TASK_FIELDS.map(function (f) { return f[1]; }),
   '回報': REPORT_FIELDS.map(function (f) { return f[1]; }),
-  '傷患': CAS_FIELDS.map(function (f) { return f[1]; })
+  '傷患': CAS_FIELDS.map(function (f) { return f[1]; }),
+  '計畫': PLAN_FIELDS.map(function (f) { return f[1]; })
 };
 var WRITE_ACTIONS = {
   createCase: 1, updateCase: 1, saveZone: 1, saveZones: 1, deleteZone: 1,
   saveRoster: 1, saveUnit: 1, deleteUnit: 1, addMember: 1, approveMember: 1, setMemberGroup: 1, revokeMember: 1,
   regenJoinCode: 1, joinCase: 1, joinAsTemp: 1, saveTask: 1, deleteTask: 1, updateTaskStatus: 1, submitReport: 1,
   fieldTaskStatus: 1, fieldReport: 1, fieldPhoto: 1,
-  saveCasualty: 1, deleteCasualty: 1, splitCasualty: 1, updateTransport: 1, fieldCasualty: 1
+  saveCasualty: 1, deleteCasualty: 1, splitCasualty: 1, updateTransport: 1, fieldCasualty: 1,
+  savePlan: 1, deletePlan: 1
 };
 // 手機掃 QR 加入時還沒有個人權杖，改用「案件編號＋加入碼」驗證
 // 手機端的 field* 與 getMyStatus/getFieldData 不用管理權杖，改在函式內以個人權杖 memberToken 驗證
@@ -128,7 +135,7 @@ function doPost(e) {
     getMyStatus: getMyStatus_, getFieldData: getFieldData_, fieldTaskStatus: fieldTaskStatus_, fieldReport: fieldReport_,
     fieldPhoto: fieldPhoto_, getPhoto: getPhoto_,
     saveCasualty: saveCasualty_, deleteCasualty: deleteCasualty_, splitCasualty: splitCasualty_, updateTransport: updateTransport_,
-    fieldCasualty: fieldCasualty_
+    fieldCasualty: fieldCasualty_, savePlan: savePlan_, deletePlan: deletePlan_
   };
   var fn = handlers[req.action];
   if (!fn) return json_({ ok: false, error: '不認得的動作：' + req.action });
@@ -266,7 +273,7 @@ function getCase_(req) {
   var c = findCase_(req.caseId);
   var ss = caseSs_(c);
   var strip = function (r) { delete r._row; return r; };
-  ['案件人員', '單位部署', '任務', '回報', '傷患'].forEach(function (n) { ensureSheet_(ss, n, CASE_SHEETS[n]); });   // 舊案件自動補表
+  ['區域', '案件人員', '單位部署', '任務', '回報', '傷患', '計畫'].forEach(function (n) { ensureSheet_(ss, n, CASE_SHEETS[n]); });   // 舊案件自動補表
   return {
     case: caseOut_(c),
     zones: readAll_(ss.getSheetByName('區域'), ZONE_FIELDS).map(strip),
@@ -274,7 +281,8 @@ function getCase_(req) {
     members: readAll_(ss.getSheetByName('案件人員'), MEMBER_FIELDS).map(strip).map(function (m) { m.token = ''; return m; }),
     tasks: readAll_(ss.getSheetByName('任務'), TASK_FIELDS).map(strip),
     reports: readAll_(ss.getSheetByName('回報'), REPORT_FIELDS).map(strip),
-    casualties: readAll_(ss.getSheetByName('傷患'), CAS_FIELDS).map(strip).map(casOut_)
+    casualties: readAll_(ss.getSheetByName('傷患'), CAS_FIELDS).map(strip).map(casOut_),
+    plans: readAll_(ss.getSheetByName('計畫'), PLAN_FIELDS).map(strip)
   };
 }
 
@@ -852,4 +860,37 @@ function fieldCasualty_(req) {
   appendRows_(sheet_(a.ss, '傷患'), CAS_FIELDS, [rec]);
   logEvent_(a.ss, rec.reporter, '手機回報傷患', rec.id, casLabel_(rec));
   return { casualty: casOut_(rec), version: bump_(a.c) };
+}
+
+
+/* =====================================================================
+ * 第 5 階段：山域模組（登山計畫／搜救計畫；內容以 JSON 存在「內容」欄）
+ * ===================================================================== */
+function savePlan_(req) {
+  var c = openCaseForWrite_(req.caseId), ss = caseSs_(c), sh = sheet_(ss, '計畫'), x = req.plan || {};
+  if (!x.id) throw new Error('計畫資料缺少 ID');
+  if (x.type !== '登山計畫' && x.type !== '搜救計畫') throw new Error('計畫類型只能是「登山計畫」或「搜救計畫」');
+  if (String(x.content || '').length > GEOJSON_CELL_MAX) throw new Error('計畫內容過大（超過 ' + GEOJSON_CELL_MAX + ' 字元）');
+  var old = findById_(sh, PLAN_FIELDS, x.id);
+  var merged = {};
+  Object.keys(old || {}).forEach(function (k) { merged[k] = old[k]; });
+  Object.keys(x).forEach(function (k) { merged[k] = x[k]; });
+  var rec = pick_(PLAN_FIELDS, merged);
+  rec.updatedBy = req.actor || ''; rec.updated = nowStr_();
+  if (!old && !rec.version) {
+    var n = 0;
+    readAll_(sh, PLAN_FIELDS).forEach(function (r) { if (r.type === x.type) n++; });
+    rec.version = String(n + 1);
+  }
+  upsertById_(sh, PLAN_FIELDS, rec);
+  logEvent_(ss, req.actor, (old ? '修改' : '新增') + rec.type, rec.id, rec.type + ' v' + rec.version);
+  return { plan: rec, version: bump_(c) };
+}
+function deletePlan_(req) {
+  var c = openCaseForWrite_(req.caseId), ss = caseSs_(c), sh = sheet_(ss, '計畫');
+  var x = findById_(sh, PLAN_FIELDS, req.planId);
+  if (!x) throw new Error('找不到計畫');
+  sh.deleteRow(x._row);
+  logEvent_(ss, req.actor, '刪除' + x.type, x.id, x.type + ' v' + x.version);
+  return { version: bump_(c) };
 }

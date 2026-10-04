@@ -30,6 +30,7 @@
       <button class="tab-btn" data-tab="deploy">部署<span id="badge-people" class="badge" hidden></span></button>
       <button class="tab-btn" data-tab="tasks">任務<span id="badge-tasks" class="badge neutral" hidden></span></button>
       <button class="tab-btn" data-tab="cas">傷患<span id="badge-cas" class="badge" hidden></span></button>
+      <button class="tab-btn" id="tab-mt" data-tab="mt" hidden>山域</button>
       <button class="tab-btn" data-tab="tools">工具</button>
     </nav>
 
@@ -90,6 +91,21 @@
       <div id="cas-list" class="list"></div>
     </section>
 
+    <section id="pane-mt" class="pane">
+      <div class="seg">
+        <button class="seg-btn active" data-mt="seg">分區</button>
+        <button class="seg-btn" data-mt="plan">計畫</button>
+        <button class="seg-btn" data-mt="trk">軌跡</button>
+      </div>
+      <div id="mt-seg"></div>
+      <div id="mt-plan" hidden></div>
+      <div id="mt-trk" hidden>
+        <div class="pane-bar"><button id="btn-mt-import" class="btn primary">匯入軌跡（GPX／KML／KMZ）</button></div>
+        <label class="chk pad"><input id="mt-cover" type="checkbox"> 顯示搜索覆蓋範圍（搜索軌跡兩側各 50 m）</label>
+        <div id="mt-tracks" class="list"></div>
+      </div>
+    </section>
+
     <section id="pane-tools" class="pane">
       <div class="tool-block">
         <h3>座標定位</h3>
@@ -136,6 +152,7 @@
 <script src="js/deploy.js"></script>
 <script src="js/tasks.js"></script>
 <script src="js/casualty.js"></script>
+<script src="js/mountain.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

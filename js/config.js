@@ -55,6 +55,9 @@ const CFG = {
     { id: '指揮所', color: '#263238' },
     { id: '集結點', color: '#2e7d32' },
     { id: '直升機起降點', color: '#6a1b9a' },
+    { id: '計畫路線', color: '#00897b' },
+    { id: '搜索軌跡', color: '#1e88e5' },
+    { id: '參考軌跡', color: '#8d6e63' },
     { id: '匯入資料', color: '#546e7a' },
     { id: '其他', color: '#757575' }
   ],
@@ -77,6 +80,10 @@ const CFG = {
     { id: '執行中', color: '#ef6c00' },
     { id: '撤離', color: '#9e9e9e' }
   ],
+  // 山域模組
+  SEARCH_STATUS: ['未搜', '搜索中', '已搜'],
+  TRACK_CATS: ['計畫路線', '搜索軌跡', '參考軌跡'],
+  COVER_BUFFER_M: 50,      // 搜索軌跡兩側各 50 m 視為已搜索範圍
   // 檢傷分級
   TRIAGE: [
     { id: '紅', color: '#d32f2f', text: '立即', field: 'red' },

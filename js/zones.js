@@ -17,7 +17,8 @@ const Zones = {
     const z = {
       id: U.uid('Z'), name: shape.name || '', category: cat, color: CFG.catColor(cat),
       geomType: shape.geomType, radius: shape.radius || '', geojson: JSON.stringify(shape.geometry),
-      measure: '', hazard: '', note: '', created: U.now(), updated: U.now()
+      measure: '', hazard: '', note: '', created: U.now(), updated: U.now(),
+      priority: '', status: '', terrain: '', quality: '', teamId: '', segmentId: ''
     };
     z.measure = U.measure(z.geomType, shape.geometry, z.radius);
     return z;
@@ -120,6 +121,14 @@ const Zones = {
       '<label>危險因子<input id="ze-hazard" type="text" maxlength="200" value="' + U.esc(z.hazard) + '" placeholder="例：落石、濕滑（可點下方快選）"></label>' +
       '<div class="chips">' + chips + '</div>' +
       '<label>備註<textarea id="ze-note" rows="3" maxlength="500">' + U.esc(z.note) + '</textarea></label>' +
+      '<div id="ze-seg" class="subform" hidden><div class="lbl">搜索分區</div>' +
+      '<div class="row2"><label>優先序（1 最優先）<input id="ze-pri" type="number" min="1" max="99" value="' + U.esc(z.priority) + '"></label>' +
+      '<label>搜索狀態<select id="ze-st">' + CFG.SEARCH_STATUS.map(s => '<option' + (s === (z.status || '未搜') ? ' selected' : '') + '>' + s + '</option>').join('') + '</select></label></div>' +
+      '<label>地形說明<input id="ze-ter" type="text" maxlength="200" value="' + U.esc(z.terrain) + '" placeholder="例：陡坡、密林、溪溝"></label>' +
+      '<label>搜索品質說明<input id="ze-qua" type="text" maxlength="200" value="' + U.esc(z.quality) + '" placeholder="例：已目視搜索，視線不佳"></label></div>' +
+      '<div id="ze-trk" class="subform" hidden><div class="lbl">軌跡關聯</div>' +
+      '<div class="row2"><label>隊伍（單位）<select id="ze-team"><option value="">（不指定）</option>' + App.state.units.map(u => '<option value="' + U.esc(u.id) + '"' + (u.id === z.teamId ? ' selected' : '') + '>' + U.esc(u.name) + '</option>').join('') + '</select></label>' +
+      '<label>所屬分區<select id="ze-segid"><option value="">（不指定）</option>' + App.state.zones.filter(x => x.category === '搜索區').map(x => '<option value="' + U.esc(x.id) + '"' + (x.id === z.segmentId ? ' selected' : '') + '>' + U.esc(x.name || x.id) + '</option>').join('') + '</select></label></div></div>' +
       '<div class="hint">圖形：' + U.esc(geomName) + (z.measure ? '　' + U.esc(z.measure) : '') + '</div></div>';
     return U.modal({
       title: isNew ? '新增區域' : '區域屬性', html: html,
@@ -132,10 +141,20 @@ const Zones = {
           z.color = U.$('#ze-color', el).value;
           z.hazard = U.$('#ze-hazard', el).value.trim();
           z.note = U.$('#ze-note', el).value.trim();
+          if (z.category === '搜索區') {
+            z.priority = U.$('#ze-pri', el).value.trim(); z.status = U.$('#ze-st', el).value;
+            z.terrain = U.$('#ze-ter', el).value.trim(); z.quality = U.$('#ze-qua', el).value.trim();
+          }
+          if (z.category === '搜索軌跡') { z.teamId = U.$('#ze-team', el).value; z.segmentId = U.$('#ze-segid', el).value; }
         }
       }],
       onOpen: el => {
-        U.$('#ze-cat', el).addEventListener('change', e => { U.$('#ze-color', el).value = CFG.catColor(e.target.value); });
+        const showExtra = () => {
+          const c = U.$('#ze-cat', el).value;
+          U.$('#ze-seg', el).hidden = c !== '搜索區'; U.$('#ze-trk', el).hidden = c !== '搜索軌跡';
+        };
+        U.$('#ze-cat', el).addEventListener('change', e => { U.$('#ze-color', el).value = CFG.catColor(e.target.value); showExtra(); });
+        showExtra();
         U.$$('.chip', el).forEach(b => b.addEventListener('click', () => {
           const inp = U.$('#ze-hazard', el), h = b.dataset.h;
           const cur = inp.value.split(/[、,，]/).map(s => s.trim()).filter(Boolean);
@@ -173,7 +192,7 @@ const Zones = {
       '<div class="zone-item" data-id="' + U.esc(z.id) + '">' +
       '<span class="swatch" style="background:' + U.esc(z.color || CFG.catColor(z.category)) + '"></span>' +
       '<div class="zi-main"><div class="zi-name">' + U.esc(z.name || z.category) + '</div>' +
-      '<div class="zi-sub">' + U.esc(z.category) + '・' + U.esc(CFG.GEOM_NAMES[z.geomType] || z.geomType) +
+      '<div class="zi-sub">' + U.esc(z.category) + (z.category === '搜索區' ? '・' + U.esc(z.status || '未搜') : '') + '・' + U.esc(CFG.GEOM_NAMES[z.geomType] || z.geomType) +
       (z.measure ? '・' + U.esc(z.measure) : '') + '</div>' +
       (z.hazard ? '<div class="zi-haz">⚠ ' + U.esc(z.hazard) + '</div>' : '') + '</div>' +
       '<div class="zi-btns"><button class="icon-btn" data-act="kml" title="匯出此區域 KML">⭳</button>' +

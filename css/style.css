@@ -214,6 +214,26 @@ body.readonly .leaflet-pm-toolbar { display: none; }
 .cnt-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .cnt { border-left: 6px solid var(--c); padding-left: 6px; }
 .seg-btn { display: flex; align-items: center; justify-content: center; text-align: center; }
+.tab-btn { font-size: 13px; }
+.tab-btn[hidden] { display: none; }
+#mt-seg[hidden], #mt-plan[hidden], #mt-trk[hidden] { display: none; }
+.subform { border: 1px solid var(--line); background: #fafbfc; border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 8px; }
+.subform[hidden] { display: none; }
+.seg-sum { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 12px 12px 0; }
+.seg-sum div { border: 2px solid; border-radius: 8px; text-align: center; padding: 5px 0; font-size: 12.5px; background: #fff; display: flex; flex-direction: column; }
+.seg-sum b { font-size: 20px; }
+.seg-item, .plan-item { background: #fff; border: 1px solid var(--line); border-left: 6px solid #999; border-radius: var(--radius); padding: 9px 11px; }
+.plan-item { border-left-color: #455a64; }
+.pri { display: inline-block; min-width: 20px; text-align: center; background: var(--bar); color: #fff; border-radius: 4px; margin-right: 6px; font-size: 12px; padding: 0 4px; }
+.cov-bar { position: relative; height: 20px; background: #e8f5e9; border-radius: 6px; margin-top: 6px; overflow: hidden; }
+.cov-bar i { position: absolute; inset: 0 auto 0 0; background: #81c784; }
+.cov-bar span { position: relative; font-size: 12.5px; line-height: 20px; padding-left: 8px; }
+.asg { padding: 5px 0; border-top: 1px dashed var(--line); font-size: 13.5px; }
+.asg-list { display: flex; flex-direction: column; gap: 10px; max-height: 50vh; overflow-y: auto; }
+.asg-row { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: #fafbfc; }
+.asg-units { display: flex; flex-wrap: wrap; gap: 2px 14px; margin: 4px 0; }
+.row3 { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 6px; }
+details summary { cursor: pointer; font-size: 13px; color: #1565c0; margin: 4px 0; }
 .ph-box { display: flex; flex-direction: column; gap: 10px; }
 .ph-box img { width: 100%; max-height: 70vh; object-fit: contain; border-radius: 8px; background: #111; }
 
