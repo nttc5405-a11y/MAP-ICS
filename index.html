@@ -29,6 +29,7 @@
       <button class="tab-btn" data-tab="zones">區域</button>
       <button class="tab-btn" data-tab="deploy">部署<span id="badge-people" class="badge" hidden></span></button>
       <button class="tab-btn" data-tab="tasks">任務<span id="badge-tasks" class="badge neutral" hidden></span></button>
+      <button class="tab-btn" data-tab="cas">傷患<span id="badge-cas" class="badge" hidden></span></button>
       <button class="tab-btn" data-tab="tools">工具</button>
     </nav>
 
@@ -80,6 +81,15 @@
       <div id="report-list" class="list"></div>
     </section>
 
+    <section id="pane-cas" class="pane">
+      <div id="cas-summary" class="cas-summary"></div>
+      <div class="pane-bar"><button id="btn-new-cas" class="btn primary">＋ 新增傷患</button><button id="btn-cas-csv" class="btn">匯出傷患表</button></div>
+      <div class="pane-bar">
+        <select id="cas-filter"><option value="open">尚未到院</option><option value="done">已到院</option><option value="all">全部</option></select>
+      </div>
+      <div id="cas-list" class="list"></div>
+    </section>
+
     <section id="pane-tools" class="pane">
       <div class="tool-block">
         <h3>座標定位</h3>
@@ -125,6 +135,7 @@
 <script src="js/cases.js"></script>
 <script src="js/deploy.js"></script>
 <script src="js/tasks.js"></script>
+<script src="js/casualty.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

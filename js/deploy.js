@@ -60,7 +60,7 @@ const Deploy = {
     const pend = App.state.members.filter(m => m.status === '待確認').length;
     const badge = U.$('#badge-people');
     if (badge) { badge.textContent = pend; badge.hidden = !pend; }
-    Tasks && Tasks.renderAll && Tasks.renderAll();   // 單位／人員變動會影響任務顯示名稱
+    Tasks.renderAll(); Casualties.renderAll();   // 單位／人員變動會影響任務顯示名稱
   },
 
   /* ---------- 單位 ---------- */

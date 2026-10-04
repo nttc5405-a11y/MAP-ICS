@@ -52,6 +52,7 @@ const MapView = {
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && this._pickCb) { this.cancelPick(); U.toast('已取消選取位置'); } });
     this.unitGroup = L.layerGroup().addTo(m);
     this.reportGroup = L.layerGroup().addTo(m);
+    this.casGroup = L.layerGroup().addTo(m);
     return m;
   },
 
@@ -279,6 +280,10 @@ const MapView = {
     const mk = this.reportMarkers && this.reportMarkers[id];
     if (mk) { this.map.setView(mk.getLatLng(), Math.max(this.map.getZoom(), 16)); mk.openTooltip(); }
   },
+  focusCasualty(id) {
+    const mk = this.casMarkers && this.casMarkers[id];
+    if (mk) { this.map.setView(mk.getLatLng(), Math.max(this.map.getZoom(), 16)); mk.openTooltip(); }
+  },
   focusUnit(id) {
     const mk = this.unitMarkers && this.unitMarkers[id];
     if (mk) { this.map.setView(mk.getLatLng(), Math.max(this.map.getZoom(), 15)); mk.openTooltip(); }
@@ -296,6 +301,7 @@ const MapView = {
     this.cancelPick();
     if (this.unitGroup) this.unitGroup.clearLayers();
     if (this.reportGroup) this.reportGroup.clearLayers();
+    if (this.casGroup) this.casGroup.clearLayers();
     this.zoneGroup.clearLayers(); this.layers = {}; this.selectedId = null;
     if (this.caseMarker) { this.map.removeLayer(this.caseMarker); this.caseMarker = null; }
     this.tempLayer.clearLayers();

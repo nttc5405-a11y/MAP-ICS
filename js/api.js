@@ -45,7 +45,7 @@ const Api = {
     let d = null;
     try { d = JSON.parse(U.store.get(Api.KEY_DB, '')); } catch (e) { /* 重建 */ }
     if (!d || !d.cases) d = { cases: [], zones: {}, logs: {} };
-    ['units', 'members', 'tasks', 'reports'].forEach(k => { d[k] = d[k] || {}; });
+    ['units', 'members', 'tasks', 'reports', 'casualties'].forEach(k => { d[k] = d[k] || {}; });
     if (!d.roster) d.roster = Api.sampleRoster();
     return d;
   },
@@ -157,7 +157,7 @@ const Api = {
         const c = findCase(p.caseId);
         return {
           case: c, zones: d.zones[c.id] || [], units: d.units[c.id] || [], members: d.members[c.id] || [],
-          tasks: d.tasks[c.id] || [], reports: d.reports[c.id] || []
+          tasks: d.tasks[c.id] || [], reports: d.reports[c.id] || [], casualties: d.casualties[c.id] || []
         };
       }
       case 'getVersion': {
@@ -360,6 +360,7 @@ const Api = {
           zones: d.zones[c.id] || [], units: unitsOut, tasks: tasks,
           reports: active ? lst('reports', c.id).filter(r => tids.indexOf(r.taskId) >= 0) : [],
           people: active ? lst('members', c.id).filter(x => x.status === '有效' && names.indexOf(x.group || x.unit) >= 0).map(x => ({ name: x.name, group: x.group || x.unit })) : [],
+          casualties: active ? lst('casualties', c.id).filter(x => x.reporter === m.name + '（' + m.unit + '）') : [],   // 手機只看得到自己回報的傷患
           version: c.version
         };
       }
@@ -401,9 +402,99 @@ const Api = {
         throw new Error('找不到照片');
       }
 
+      /* ---------- 第 4 階段：傷患 ---------- */
+      case 'saveCasualty': {
+        const c = findCase(p.caseId); needOpen(c);
+        const x = p.casualty;
+        if (!x || !x.id) throw new Error('傷患資料缺少 ID');
+        const list = lst('casualties', c.id), old = list.find(y => y.id === x.id);
+        const rec = Api.normCasualty(Object.assign({}, old || {}, x));
+        if (!old) { rec.status = rec.status || '發現'; rec.tFound = rec.tFound || U.now(); rec.time = rec.time || U.now(); }
+        upsertList(list, rec);
+        log(c.id, p.actor, old ? '修改傷患' : '新增傷患', rec.id, Api.casLabel(rec));
+        touch(c); Api.saveDb(d); return { casualty: rec, version: c.version };
+      }
+      case 'deleteCasualty': {
+        const c = findCase(p.caseId); needOpen(c);
+        const list = lst('casualties', c.id), i = list.findIndex(y => y.id === p.casualtyId);
+        if (i < 0) throw new Error('找不到傷患');
+        const x = list.splice(i, 1)[0];
+        // 刪群體時，拆出來的個別傷患保留，但解除與群體的關聯
+        list.forEach(y => { if (y.parentId === x.id) y.parentId = ''; });
+        log(c.id, p.actor, '刪除傷患', x.id, Api.casLabel(x));
+        touch(c); Api.saveDb(d); return { version: c.version };
+      }
+      case 'splitCasualty': {
+        const c = findCase(p.caseId); needOpen(c);
+        const list = lst('casualties', c.id), g = list.find(y => y.id === p.groupId);
+        if (!g || g.mode !== '群體') throw new Error('找不到要拆分的群體');
+        const made = [];
+        CFG.TRIAGE.forEach(t => {
+          const want = parseInt((p.counts || {})[t.id], 10) || 0;
+          if (want <= 0) return;
+          const rem = g[t.field] - list.filter(y => y.parentId === g.id && y.triage === t.id).length - made.filter(y => y.triage === t.id).length;
+          if (want > rem) throw new Error(t.id + '色只剩 ' + Math.max(0, rem) + ' 人可拆分');
+          for (let i = 0; i < want; i++) {
+            made.push({
+              id: U.uid('C'), mode: '單人', triage: t.id, red: 0, yellow: 0, green: 0, black: 0, parentId: g.id, quick: '', desc: '',
+              photos: '', coord: g.coord, reporter: g.reporter, taskId: g.taskId, status: g.status, vehicle: g.vehicle, hospital: g.hospital,
+              tFound: g.tFound, tTreated: g.tTreated, tTransporting: g.tTransporting, tArrived: g.tArrived, time: U.now()
+            });
+          }
+        });
+        if (!made.length) throw new Error('請輸入要拆分的人數');
+        made.forEach(y => list.push(y));
+        log(c.id, p.actor, '拆分傷患群體', g.id, '拆出 ' + made.length + ' 人');
+        touch(c); Api.saveDb(d); return { casualties: made, version: c.version };
+      }
+      case 'updateTransport': {
+        const c = findCase(p.caseId); needOpen(c);
+        const x = lst('casualties', c.id).find(y => y.id === p.casualtyId);
+        if (!x) throw new Error('找不到傷患');
+        const st = CFG.TRANSPORT.find(s => s.id === p.status);
+        if (!st) throw new Error('不認得的後送狀態：' + p.status);
+        x.status = st.id; x[st.time] = U.now();
+        if (p.vehicle !== undefined) x.vehicle = p.vehicle;
+        if (p.hospital !== undefined) x.hospital = p.hospital;
+        log(c.id, p.actor, '後送狀態', x.id, Api.casLabel(x) + ' → ' + st.id + (x.vehicle ? '，車輛 ' + x.vehicle : '') + (x.hospital ? '，送往 ' + x.hospital : ''));
+        touch(c); Api.saveDb(d); return { casualty: x, version: c.version };
+      }
+      case 'fieldCasualty': {
+        const a = authMember(p, true);
+        const rec = Api.normCasualty(Object.assign({}, p.casualty, {
+          id: U.uid('C'), parentId: '', reporter: a.m.name + '（' + a.m.unit + '）', status: '發現', vehicle: '', hospital: '',
+          tFound: U.now(), time: U.now()
+        }));
+        lst('casualties', a.c.id).push(rec);
+        log(a.c.id, rec.reporter, '手機回報傷患', rec.id, Api.casLabel(rec));
+        touch(a.c); Api.saveDb(d); return { casualty: rec, version: a.c.version };
+      }
+
       default:
         throw new Error('本機試用模式尚未支援動作：' + action);
     }
+  },
+
+  /* 傷患資料整理與檢查（本機模式用；GAS 端有同樣規則） */
+  normCasualty(x) {
+    const r = Object.assign({}, x);
+    const n = v => Math.max(0, Math.min(999, parseInt(v, 10) || 0));
+    if (r.mode === '群體') {
+      r.triage = '';
+      CFG.TRIAGE.forEach(t => { r[t.field] = n(r[t.field]); });
+      if (CFG.TRIAGE.reduce((s, t) => s + r[t.field], 0) < 1) throw new Error('多人回報至少要有 1 人');
+    } else {
+      r.mode = '單人';
+      if (!CFG.TRIAGE.some(t => t.id === r.triage)) throw new Error('請選擇檢傷等級（紅／黃／綠／黑）');
+      CFG.TRIAGE.forEach(t => { r[t.field] = 0; });
+    }
+    r.photos = Array.isArray(r.photos) ? r.photos.slice(0, 3).join(',') : String(r.photos || '');
+    return r;
+  },
+
+  casLabel(x) {
+    if (x.mode === '群體') return '多人 ' + CFG.TRIAGE.filter(t => x[t.field] > 0).map(t => t.id + x[t.field]).join(' ');
+    return '單人 檢傷' + x.triage + (x.quick ? '（' + x.quick + '）' : '');
   },
 
   /* 清空本機試用資料（設定頁使用） */

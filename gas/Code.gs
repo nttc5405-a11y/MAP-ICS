@@ -38,6 +38,12 @@ var REPORT_FIELDS = [
   ['id', '回報ID'], ['taskId', '任務ID'], ['zoneId', '區域ID'], ['reporter', '回報者'], ['source', '來源'], ['type', '類型'],
   ['content', '內容'], ['photos', '照片ID'], ['coord', '座標'], ['time', '時間']
 ];
+var CAS_FIELDS = [
+  ['id', '傷患ID'], ['mode', '模式'], ['triage', '檢傷'], ['red', '紅人數'], ['yellow', '黃人數'], ['green', '綠人數'], ['black', '黑人數'],
+  ['parentId', '上層群體ID'], ['quick', '狀況快選'], ['desc', '描述'], ['photos', '照片ID'], ['coord', '發現座標'], ['reporter', '回報者'],
+  ['taskId', '任務ID'], ['status', '後送狀態'], ['vehicle', '後送車輛'], ['hospital', '送往醫院'], ['tFound', '發現時間'],
+  ['tTreated', '處置時間'], ['tTransporting', '後送時間'], ['tArrived', '到院時間'], ['time', '建立時間']
+];
 var ROSTER_UNIT_FIELDS = [['id', '單位ID'], ['name', '單位名稱'], ['category', '類別'], ['vehicles', '車輛'], ['order', '排序']];
 var ROSTER_PEOPLE_FIELDS = [['id', '人員ID'], ['unit', '單位'], ['name', '姓名'], ['title', '職務'], ['order', '排序'], ['active', '啟用']];
 var TASK_STATUS_TIME = { '已派遣': 'tAssigned', '已接收': 'tReceived', '已抵達': 'tArrived', '執行中': 'tRunning', '完成': 'tDone', '需支援': 'tSupport' };
@@ -54,17 +60,19 @@ var CASE_SHEETS = {
   '案件人員': MEMBER_FIELDS.map(function (f) { return f[1]; }),
   '單位部署': UNIT_FIELDS.map(function (f) { return f[1]; }),
   '任務': TASK_FIELDS.map(function (f) { return f[1]; }),
-  '回報': REPORT_FIELDS.map(function (f) { return f[1]; })
+  '回報': REPORT_FIELDS.map(function (f) { return f[1]; }),
+  '傷患': CAS_FIELDS.map(function (f) { return f[1]; })
 };
 var WRITE_ACTIONS = {
   createCase: 1, updateCase: 1, saveZone: 1, saveZones: 1, deleteZone: 1,
   saveRoster: 1, saveUnit: 1, deleteUnit: 1, addMember: 1, approveMember: 1, setMemberGroup: 1, revokeMember: 1,
   regenJoinCode: 1, joinCase: 1, joinAsTemp: 1, saveTask: 1, deleteTask: 1, updateTaskStatus: 1, submitReport: 1,
-  fieldTaskStatus: 1, fieldReport: 1, fieldPhoto: 1
+  fieldTaskStatus: 1, fieldReport: 1, fieldPhoto: 1,
+  saveCasualty: 1, deleteCasualty: 1, splitCasualty: 1, updateTransport: 1, fieldCasualty: 1
 };
 // 手機掃 QR 加入時還沒有個人權杖，改用「案件編號＋加入碼」驗證
 // 手機端的 field* 與 getMyStatus/getFieldData 不用管理權杖，改在函式內以個人權杖 memberToken 驗證
-var PUBLIC_ACTIONS = { getJoinInfo: 1, joinCase: 1, joinAsTemp: 1, getMyStatus: 1, getFieldData: 1, fieldTaskStatus: 1, fieldReport: 1, fieldPhoto: 1 };
+var PUBLIC_ACTIONS = { getJoinInfo: 1, joinCase: 1, joinAsTemp: 1, getMyStatus: 1, getFieldData: 1, fieldTaskStatus: 1, fieldReport: 1, fieldPhoto: 1, fieldCasualty: 1 };
 
 /* =====================================================================
  * 第一次使用：在編輯器選 setup 按「執行」。會建立工作表、根資料夾與管理權杖。
@@ -118,7 +126,9 @@ function doPost(e) {
     getJoinInfo: getJoinInfo_, joinCase: joinCase_, joinAsTemp: joinAsTemp_,
     saveTask: saveTask_, deleteTask: deleteTask_, updateTaskStatus: updateTaskStatus_, submitReport: submitReport_,
     getMyStatus: getMyStatus_, getFieldData: getFieldData_, fieldTaskStatus: fieldTaskStatus_, fieldReport: fieldReport_,
-    fieldPhoto: fieldPhoto_, getPhoto: getPhoto_
+    fieldPhoto: fieldPhoto_, getPhoto: getPhoto_,
+    saveCasualty: saveCasualty_, deleteCasualty: deleteCasualty_, splitCasualty: splitCasualty_, updateTransport: updateTransport_,
+    fieldCasualty: fieldCasualty_
   };
   var fn = handlers[req.action];
   if (!fn) return json_({ ok: false, error: '不認得的動作：' + req.action });
@@ -256,14 +266,15 @@ function getCase_(req) {
   var c = findCase_(req.caseId);
   var ss = caseSs_(c);
   var strip = function (r) { delete r._row; return r; };
-  ['案件人員', '單位部署', '任務', '回報'].forEach(function (n) { ensureSheet_(ss, n, CASE_SHEETS[n]); });   // 舊案件自動補表
+  ['案件人員', '單位部署', '任務', '回報', '傷患'].forEach(function (n) { ensureSheet_(ss, n, CASE_SHEETS[n]); });   // 舊案件自動補表
   return {
     case: caseOut_(c),
     zones: readAll_(ss.getSheetByName('區域'), ZONE_FIELDS).map(strip),
     units: readAll_(ss.getSheetByName('單位部署'), UNIT_FIELDS).map(strip).map(unitOut_),
     members: readAll_(ss.getSheetByName('案件人員'), MEMBER_FIELDS).map(strip).map(function (m) { m.token = ''; return m; }),
     tasks: readAll_(ss.getSheetByName('任務'), TASK_FIELDS).map(strip),
-    reports: readAll_(ss.getSheetByName('回報'), REPORT_FIELDS).map(strip)
+    reports: readAll_(ss.getSheetByName('回報'), REPORT_FIELDS).map(strip),
+    casualties: readAll_(ss.getSheetByName('傷患'), CAS_FIELDS).map(strip).map(casOut_)
   };
 }
 
@@ -673,7 +684,8 @@ function getFieldData_(req) {
     zones: readAll_(ss.getSheetByName('區域'), ZONE_FIELDS).map(stripRow_),
     units: unitsOut, tasks: tasks,
     reports: active ? readAll_(sheet_(ss, '回報'), REPORT_FIELDS).map(stripRow_).filter(function (r) { return tids.indexOf(r.taskId) >= 0; }) : [],
-    people: members, version: Number(c.version) || 0
+    people: members, version: Number(c.version) || 0,
+    casualties: active ? readAll_(sheet_(ss, '傷患'), CAS_FIELDS).map(stripRow_).filter(function (x) { return x.reporter === m.name + '（' + m.unit + '）'; }).map(casOut_) : []   // 手機只看得到自己回報的傷患
   };
 }
 
@@ -728,4 +740,116 @@ function getPhoto_(req) {
   while (ps.hasNext()) if (ps.next().getId() === folder.getId()) ok = true;
   if (!ok) throw new Error('找不到照片');
   return { mime: file.getMimeType(), data: Utilities.base64Encode(file.getBlob().getBytes()) };
+}
+
+
+/* =====================================================================
+ * 第 4 階段：傷患（手機回報 + 指揮所後送管制）
+ * ===================================================================== */
+var TRIAGE_ = [['紅', 'red'], ['黃', 'yellow'], ['綠', 'green'], ['黑', 'black']];
+var TRANSPORT_TIME = { '發現': 'tFound', '處置': 'tTreated', '後送中': 'tTransporting', '已到院': 'tArrived' };
+
+function casOut_(x) {
+  TRIAGE_.forEach(function (t) { x[t[1]] = Number(x[t[1]]) || 0; });
+  return x;
+}
+function casLabel_(x) {
+  if (x.mode === '群體') return '多人 ' + TRIAGE_.filter(function (t) { return Number(x[t[1]]) > 0; }).map(function (t) { return t[0] + x[t[1]]; }).join(' ');
+  return '單人 檢傷' + x.triage + (x.quick ? '（' + x.quick + '）' : '');
+}
+/** 整理並檢查一筆傷患資料（單人要有檢傷色；多人至少 1 人） */
+function normCasualty_(x) {
+  var r = {};
+  Object.keys(x).forEach(function (k) { r[k] = x[k]; });
+  var n = function (v) { return Math.max(0, Math.min(999, parseInt(v, 10) || 0)); };
+  if (r.mode === '群體') {
+    r.triage = ''; var total = 0;
+    TRIAGE_.forEach(function (t) { r[t[1]] = n(r[t[1]]); total += r[t[1]]; });
+    if (total < 1) throw new Error('多人回報至少要有 1 人');
+  } else {
+    r.mode = '單人';
+    if (!TRIAGE_.some(function (t) { return t[0] === r.triage; })) throw new Error('請選擇檢傷等級（紅／黃／綠／黑）');
+    TRIAGE_.forEach(function (t) { r[t[1]] = 0; });
+  }
+  r.photos = Array.isArray(r.photos) ? r.photos.slice(0, 3).join(',') : String(r.photos || '');
+  return r;
+}
+
+function saveCasualty_(req) {
+  var c = openCaseForWrite_(req.caseId), ss = caseSs_(c), sh = sheet_(ss, '傷患'), x = req.casualty || {};
+  if (!x.id) throw new Error('傷患資料缺少 ID');
+  var old = findById_(sh, CAS_FIELDS, x.id);
+  var merged = {};
+  Object.keys(old || {}).forEach(function (k) { merged[k] = old[k]; });
+  Object.keys(x).forEach(function (k) { merged[k] = x[k]; });
+  var rec = pick_(CAS_FIELDS, normCasualty_(merged));
+  if (!old) { rec.status = rec.status || '發現'; rec.tFound = rec.tFound || nowStr_(); rec.time = rec.time || nowStr_(); }
+  upsertById_(sh, CAS_FIELDS, rec);
+  logEvent_(ss, req.actor, old ? '修改傷患' : '新增傷患', rec.id, casLabel_(rec));
+  return { casualty: casOut_(rec), version: bump_(c) };
+}
+function deleteCasualty_(req) {
+  var c = openCaseForWrite_(req.caseId), ss = caseSs_(c), sh = sheet_(ss, '傷患');
+  var x = findById_(sh, CAS_FIELDS, req.casualtyId);
+  if (!x) throw new Error('找不到傷患');
+  // 刪群體時，拆出來的個別傷患保留，但解除與群體的關聯
+  readAll_(sh, CAS_FIELDS).forEach(function (y) {
+    if (y.parentId === x.id) { y.parentId = ''; writeRow_(sh, CAS_FIELDS, y._row, y); }
+  });
+  x = findById_(sh, CAS_FIELDS, req.casualtyId);
+  sh.deleteRow(x._row);
+  logEvent_(ss, req.actor, '刪除傷患', x.id, casLabel_(x));
+  return { version: bump_(c) };
+}
+function splitCasualty_(req) {
+  var c = openCaseForWrite_(req.caseId), ss = caseSs_(c), sh = sheet_(ss, '傷患');
+  var all = readAll_(sh, CAS_FIELDS), g = null;
+  all.forEach(function (y) { if (y.id === String(req.groupId)) g = y; });
+  if (!g || g.mode !== '群體') throw new Error('找不到要拆分的群體');
+  var made = [], counts = req.counts || {};
+  TRIAGE_.forEach(function (t) {
+    var want = parseInt(counts[t[0]], 10) || 0;
+    if (want <= 0) return;
+    var used = all.filter(function (y) { return y.parentId === g.id && y.triage === t[0]; }).length;
+    var rem = (Number(g[t[1]]) || 0) - used;
+    if (want > rem) throw new Error(t[0] + '色只剩 ' + Math.max(0, rem) + ' 人可拆分');
+    for (var i = 0; i < want; i++) {
+      made.push({
+        id: 'C' + Utilities.getUuid().replace(/-/g, '').slice(0, 10).toUpperCase(), mode: '單人', triage: t[0], red: 0, yellow: 0, green: 0, black: 0,
+        parentId: g.id, quick: '', desc: '', photos: '', coord: g.coord, reporter: g.reporter, taskId: g.taskId, status: g.status,
+        vehicle: g.vehicle, hospital: g.hospital, tFound: g.tFound, tTreated: g.tTreated, tTransporting: g.tTransporting,
+        tArrived: g.tArrived, time: nowStr_()
+      });
+    }
+  });
+  if (!made.length) throw new Error('請輸入要拆分的人數');
+  appendRows_(sh, CAS_FIELDS, made);
+  logEvent_(ss, req.actor, '拆分傷患群體', g.id, '拆出 ' + made.length + ' 人');
+  return { casualties: made.map(casOut_), version: bump_(c) };
+}
+function updateTransport_(req) {
+  var c = openCaseForWrite_(req.caseId), ss = caseSs_(c), sh = sheet_(ss, '傷患');
+  var x = findById_(sh, CAS_FIELDS, req.casualtyId);
+  if (!x) throw new Error('找不到傷患');
+  var tf = TRANSPORT_TIME[req.status];
+  if (!tf) throw new Error('不認得的後送狀態：' + req.status);
+  x.status = req.status; x[tf] = nowStr_();
+  if (req.vehicle !== undefined) x.vehicle = req.vehicle;
+  if (req.hospital !== undefined) x.hospital = req.hospital;
+  writeRow_(sh, CAS_FIELDS, x._row, x);
+  logEvent_(ss, req.actor, '後送狀態', x.id, casLabel_(x) + ' → ' + req.status + (x.vehicle ? '，車輛 ' + x.vehicle : '') + (x.hospital ? '，送往 ' + x.hospital : ''));
+  delete x._row;
+  return { casualty: casOut_(x), version: bump_(c) };
+}
+function fieldCasualty_(req) {
+  var a = authMember_(req, true), x = req.casualty || {};
+  var src = {};
+  Object.keys(x).forEach(function (k) { src[k] = x[k]; });
+  src.id = 'C' + Utilities.getUuid().replace(/-/g, '').slice(0, 10).toUpperCase();
+  src.parentId = ''; src.reporter = a.m.name + '（' + a.m.unit + '）'; src.status = '發現'; src.vehicle = ''; src.hospital = '';
+  src.tFound = nowStr_(); src.time = nowStr_();
+  var rec = pick_(CAS_FIELDS, normCasualty_(src));
+  appendRows_(sheet_(a.ss, '傷患'), CAS_FIELDS, [rec]);
+  logEvent_(a.ss, rec.reporter, '手機回報傷患', rec.id, casLabel_(rec));
+  return { casualty: casOut_(rec), version: bump_(a.c) };
 }

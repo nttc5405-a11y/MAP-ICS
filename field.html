@@ -30,6 +30,7 @@
   <section id="v-list" class="view" hidden>
     <div id="tasks"></div>
     <div id="detail" hidden></div>
+    <div id="cas-view" hidden></div>
   </section>
 
   <!-- 地圖模式 -->
@@ -44,7 +45,14 @@
 </main>
 
 <footer id="ffoot" hidden>
-  <button id="btn-report" class="big-btn">📝 回報狀況</button>
+  <nav id="ftabs" class="ftabs">
+    <button data-ft="tasks" class="on">📋 任務</button>
+    <button data-ft="cas">🚑 傷患<i id="cas-n" class="cnt-dot" hidden></i></button>
+  </nav>
+  <div class="foot-btns">
+    <button id="btn-report" class="big-btn">📝 回報狀況</button>
+    <button id="btn-cas" class="big-btn cas">🚑 回報傷患</button>
+  </div>
 </footer>
 
 <!-- 回報表單 -->

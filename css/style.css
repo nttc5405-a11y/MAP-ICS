@@ -191,6 +191,29 @@ body.readonly .leaflet-pm-toolbar { display: none; }
 .unit-badge { display: inline-flex; align-items: center; gap: 5px; background: #fff; border: 2px solid #546e7a; border-radius: 6px; padding: 2px 7px; font-size: 12.5px; font-weight: 700; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
 .unit-badge i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
 
+.cas-summary { margin: 12px 12px 0; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; }
+.tri-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 6px; }
+.tri-box { color: #fff; border-radius: 8px; text-align: center; padding: 6px 0; display: flex; flex-direction: column; line-height: 1.2; }
+.tri-box b { font-size: 22px; } .tri-box span { font-size: 12px; opacity: .9; }
+.cas-item { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 9px 11px; cursor: pointer; }
+.cas-item.done { opacity: .65; } .cas-item.sel { outline: 2px solid #64b5f6; }
+.cas-top { display: flex; gap: 10px; align-items: center; }
+.cas-main { flex: 1; min-width: 0; }
+.cas-chip { width: 34px; height: 34px; border-radius: 50%; color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none; }
+.cas-chip.pie { background: none; }
+.cas-wrap { background: none; border: 0; }
+.cas-dot { width: 26px; height: 26px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 1px 5px rgba(0,0,0,.55); color: #fff; font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.cas-dot.done, .cas-pie.done { opacity: .5; }
+.cas-pie { filter: drop-shadow(0 1px 3px rgba(0,0,0,.5)); background: rgba(255,255,255,.9); border-radius: 50%; width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; }
+.tri-picks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.tri-pick input { position: absolute; opacity: 0; }
+.tri-pick { position: relative; }
+.tri-pick span { display: flex; flex-direction: column; align-items: center; padding: 10px 0; border: 3px solid var(--c); border-radius: 10px; color: var(--c); font-weight: 700; font-size: 18px; cursor: pointer; }
+.tri-pick span small { font-size: 11px; font-weight: 400; }
+.tri-pick input:checked + span { background: var(--c); color: #fff; }
+.cnt-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.cnt { border-left: 6px solid var(--c); padding-left: 6px; }
+.seg-btn { display: flex; align-items: center; justify-content: center; text-align: center; }
 .ph-box { display: flex; flex-direction: column; gap: 10px; }
 .ph-box img { width: 100%; max-height: 70vh; object-fit: contain; border-radius: 8px; background: #111; }
 

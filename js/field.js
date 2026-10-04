@@ -1,6 +1,6 @@
 /* 手機現場版：QR 加入、地圖／清單兩種檢視、一鍵狀態、文字＋照片＋位置回報 */
 const F = {
-  s: { caseId: '', code: '', token: '', member: null, data: null, mode: 'list', detail: null, gps: null, seen: null, unread: false, busy: false, version: -1, fitted: false, info: null },
+  s: { caseId: '', code: '', token: '', member: null, data: null, mode: 'list', detail: null, ftab: 'tasks', gps: null, seen: null, unread: false, busy: false, version: -1, fitted: false, info: null },
   r: null,           // 回報表單狀態（開著時不為 null）
   map: null,
   j: { q: '', unit: '' },
@@ -38,6 +38,8 @@ const F = {
     U.$('#m-list').addEventListener('click', () => F.setMode('list'));
     U.$('#m-map').addEventListener('click', () => F.setMode('map'));
     U.$('#btn-report').addEventListener('click', () => F.openReport({ taskId: F.s.detail || '' }));
+    U.$('#btn-cas').addEventListener('click', () => F.openReport({ kind: 'casualty', taskId: F.s.detail || '' }));
+    U.$$('#ftabs button').forEach(b => b.addEventListener('click', () => { F.s.ftab = b.dataset.ft; F.s.detail = null; F.render(); }));
     U.$('#gps-btn').addEventListener('click', () => {
       if (F.s.gps && F.map) F.map.setView([F.s.gps.lat, F.s.gps.lng], Math.max(F.map.getZoom(), 16));
       else U.toast('還沒有取得定位，請確認已允許瀏覽器使用位置', 'err');
@@ -103,12 +105,16 @@ const F = {
     else if (closed) { bn.hidden = false; bn.className = 'banner info'; bn.textContent = '此案件已結案，僅供查看。'; }
     else bn.hidden = true;
     U.$('#btn-report').disabled = !active || closed;
+    U.$('#btn-cas').disabled = !active || closed;
+    U.$('#ftabs').hidden = F.s.mode !== 'list';
+    U.$$('#ftabs button').forEach(b => b.classList.toggle('on', b.dataset.ft === F.s.ftab));
+    const cn = U.$('#cas-n'); cn.textContent = (d.casualties || []).length; cn.hidden = !(d.casualties || []).length;
     U.$('#m-list').classList.toggle('on', F.s.mode === 'list');
     U.$('#m-map').classList.toggle('on', F.s.mode === 'map');
     U.$('#dot').hidden = !F.s.unread;
     U.$('#v-list').hidden = F.s.mode !== 'list';
     U.$('#v-map').hidden = F.s.mode !== 'map';
-    if (F.s.mode === 'list') { F.s.detail ? F.renderDetail() : F.renderTasks(); }
+    if (F.s.mode === 'list') { if (F.s.ftab === 'cas') F.renderCas(); else F.s.detail ? F.renderDetail() : F.renderTasks(); }
     else F.renderMap();
   },
   stColor(s) { return CFG.taskColor(s); },
@@ -116,7 +122,7 @@ const F = {
 
   /* ---------- 清單：任務 ---------- */
   renderTasks() {
-    U.$('#tasks').hidden = false; U.$('#detail').hidden = true;
+    U.$('#tasks').hidden = false; U.$('#detail').hidden = true; U.$('#cas-view').hidden = true;
     const d = F.s.data, box = U.$('#tasks');
     if (d.member.status !== '有效') { box.innerHTML = '<div class="empty">尚未確認身分，看不到任務。<br>請等指揮所確認。</div>'; return; }
     const rows = d.tasks.slice().sort((a, b) => ((a.status === '完成') - (b.status === '完成')) || (a.tAssigned < b.tAssigned ? 1 : -1));
@@ -131,7 +137,7 @@ const F = {
   },
 
   renderDetail() {
-    U.$('#tasks').hidden = true; U.$('#detail').hidden = false;
+    U.$('#tasks').hidden = true; U.$('#detail').hidden = false; U.$('#cas-view').hidden = true;
     const d = F.s.data, t = d.tasks.find(x => x.id === F.s.detail), box = U.$('#detail');
     if (!t) { F.s.detail = null; F.renderTasks(); return; }
     const col = F.stColor(t.status), closed = d.case.status === '已結案';
@@ -296,13 +302,14 @@ const F = {
       if (!pos && parseFloat(d.case.lat)) pos = { lat: parseFloat(d.case.lat), lng: parseFloat(d.case.lng) };
       if (!pos) pos = { lat: CFG.DEFAULT_CENTER[0], lng: CFG.DEFAULT_CENTER[1] };
     }
-    F.r = { photos: [], pos: pos, hasPos: hasPos, zoneId: zone, sending: false };
+    F.r = { photos: [], pos: pos, hasPos: hasPos, zoneId: zone, sending: false, kind: opts.kind || 'report', mode: '單人', triage: '', counts: { 紅: 0, 黃: 0, 綠: 0, 黑: 0 }, quicks: [] };
+    const isCas = F.r.kind === 'casualty';
     const taskOpts = d.tasks.filter(x => x.status !== '完成').map(x => '<option value="' + U.esc(x.id) + '"' + (x.id === opts.taskId ? ' selected' : '') + '>' + U.esc(x.title) + '</option>').join('');
     const ov = U.$('#rsheet');
-    ov.innerHTML = '<div class="ov-head"><button id="r-close">✕ 取消</button><b>回報狀況</b><span style="width:70px"></span></div>' +
-      '<div class="ov-body">' +
+    ov.innerHTML = '<div class="ov-head"><button id="r-close">✕ 取消</button><b>' + (isCas ? '回報傷患' : '回報狀況') + '</b><span style="width:70px"></span></div>' +
+      '<div class="ov-body">' + (isCas ? F.casFieldsHtml() : '') +
       '<div class="field"><label>對應任務</label><select id="r-task"><option value="">（不屬於任何任務）</option>' + taskOpts + '</select></div>' +
-      '<div class="field"><label>狀況說明</label><textarea id="r-text" maxlength="500" placeholder="例：A 區北側發現足跡，往稜線方向"></textarea></div>' +
+      '<div class="field"><label>' + (isCas ? '簡述（選填）' : '狀況說明') + '</label><textarea id="r-text" maxlength="500" placeholder="' + (isCas ? '例：男性約 50 歲，左小腿變形' : '例：A 區北側發現足跡，往稜線方向') + '"></textarea></div>' +
       '<div class="field"><label>照片（最多 3 張）</label><div class="photos" id="r-photos"></div>' +
       '<input id="r-file" type="file" accept="image/*" capture="environment" hidden></div>' +
       '<div class="field"><label>位置（可拖曳圖釘修正）</label><div id="rmap"></div><div class="hint" id="r-pos"></div>' +
@@ -310,6 +317,7 @@ const F = {
       '<div class="hint">位置只在送出這份回報時才會傳給指揮所，不會持續回傳您的位置。</div></div>' +
       '<div class="send-bar"><div id="r-err" class="err-box" hidden></div><button class="big-btn" id="r-send">送出回報</button></div>';
     ov.hidden = false; document.body.style.overflow = 'hidden';
+    if (isCas) F.bindCasFields();
     U.$('#r-close').onclick = F.closeReport;
     U.$('#r-send').onclick = F.sendReport;
     U.$('#r-file').addEventListener('change', F.onPhoto);
@@ -335,7 +343,7 @@ const F = {
     const el = U.$('#r-pos'); if (el) el.textContent = (has ? '回報位置：' : '尚未定位（請拖曳圖釘；不拖曳則不附位置）：') + U.fmtWgs(lat, lng);
   },
   closeReport() {
-    if (F.r && (U.$('#r-text').value.trim() || F.r.photos.length) && !confirm('放棄這份尚未送出的回報嗎？')) return;
+    if (F.r && (U.$('#r-text').value.trim() || F.r.photos.length || F.r.triage || F.r.quicks.length || F.r.mode === '群體') && !confirm('放棄這份尚未送出的回報嗎？')) return;
     F.endReport();
   },
   endReport() {
@@ -376,7 +384,11 @@ const F = {
   async sendReport() {
     const r = F.r; if (!r || r.sending) return;
     const text = U.$('#r-text').value.trim();
-    if (!text && !r.photos.length) { U.toast('請填寫狀況說明或附上照片', 'err'); return; }
+    const isCas = r.kind === 'casualty';
+    if (isCas) {
+      if (r.mode === '單人' && !r.triage) { U.toast('請先點選檢傷等級（紅／黃／綠／黑）', 'err'); return; }
+      if (r.mode === '群體' && !CFG.TRIAGE.some(t => r.counts[t.id] > 0)) { U.toast('請至少填 1 人', 'err'); return; }
+    } else if (!text && !r.photos.length) { U.toast('請填寫狀況說明或附上照片', 'err'); return; }
     const btn = U.$('#r-send'), err = U.$('#r-err');
     r.sending = true; btn.disabled = true; btn.textContent = '送出中…'; err.hidden = true;
     try {
@@ -388,17 +400,76 @@ const F = {
       }
       btn.textContent = '送出中…';
       const taskId = U.$('#r-task').value, t = taskId && F.s.data.tasks.find(x => x.id === taskId);
-      await F.call('fieldReport', { report: {
-        taskId: taskId, zoneId: (t && t.zoneId) || r.zoneId || '', type: '文字', content: text,
-        photos: r.photos.map(p => p.id), coord: r.hasPos ? r.pos.lat.toFixed(6) + ',' + r.pos.lng.toFixed(6) : ''
-      } });
-      F.vib(60); F.endReport(); U.toast('回報已送出', 'ok');
+      const coord = r.hasPos ? r.pos.lat.toFixed(6) + ',' + r.pos.lng.toFixed(6) : '';
+      if (isCas) {
+        const cas = { mode: r.mode, taskId: taskId, desc: text, photos: r.photos.map(p => p.id), coord: coord };
+        if (r.mode === '群體') CFG.TRIAGE.forEach(x => { cas[x.field] = r.counts[x.id]; });
+        else { cas.triage = r.triage; cas.quick = r.quicks.join('、'); }
+        await F.call('fieldCasualty', { casualty: cas });
+      } else {
+        await F.call('fieldReport', { report: {
+          taskId: taskId, zoneId: (t && t.zoneId) || r.zoneId || '', type: '文字', content: text,
+          photos: r.photos.map(p => p.id), coord: coord
+        } });
+      }
+      F.vib(60); F.endReport(); U.toast(isCas ? '傷患回報已送出' : '回報已送出', 'ok');
+      if (isCas) { F.s.ftab = 'cas'; F.s.mode = 'list'; F.s.detail = null; }
       try { await F.refresh(false); } catch (e) { /* 下次輪詢再更新 */ }
     } catch (e) {
       if (!F.r) return;
       r.sending = false; btn.disabled = false; btn.textContent = '重新送出';
       err.hidden = false; err.textContent = '送出失敗：' + e.message + '。內容與照片都還在，請按「重新送出」。';
     }
+  },
+
+  /* ---------- 傷患回報表單的欄位 ---------- */
+  casFieldsHtml() {
+    return '<div class="seg2"><button data-m="單人" class="on">單人</button><button data-m="群體">多人</button></div>' +
+      '<div id="c-single"><div class="field"><label>檢傷等級（點一下選取）</label><div class="tri-grid">' +
+      CFG.TRIAGE.map(t => '<button class="tri-blk" style="--c:' + t.color + '" data-t="' + t.id + '">' + t.id + '<small>' + t.text + '</small></button>').join('') + '</div></div>' +
+      '<div class="field"><label>狀況快選（可複選）</label><div class="qchips">' +
+      CFG.CASUALTY_QUICKS.map(q => '<button class="qchip" data-q="' + U.esc(q) + '">' + U.esc(q) + '</button>').join('') + '</div></div></div>' +
+      '<div id="c-group" hidden><div class="field"><label>各檢傷等級人數</label>' +
+      CFG.TRIAGE.map(t => '<div class="step-row" style="--c:' + t.color + '"><div class="lab">' + t.id + '<small>' + t.text + '</small></div>' +
+        '<button data-d="-1" data-t="' + t.id + '">−</button><div class="n" id="n-' + t.id + '">0</div><button data-d="1" data-t="' + t.id + '">＋</button></div>').join('') + '</div></div>';
+  },
+  bindCasFields() {
+    const ov = U.$('#rsheet');
+    U.$$('.seg2 button', ov).forEach(b => b.onclick = () => {
+      F.r.mode = b.dataset.m;
+      U.$$('.seg2 button', ov).forEach(x => x.classList.toggle('on', x === b));
+      U.$('#c-single').hidden = F.r.mode !== '單人'; U.$('#c-group').hidden = F.r.mode !== '群體';
+    });
+    U.$$('.tri-blk', ov).forEach(b => b.onclick = () => {
+      F.r.triage = b.dataset.t; F.vib(20);
+      U.$$('.tri-blk', ov).forEach(x => x.classList.toggle('on', x === b));
+    });
+    U.$$('.qchip', ov).forEach(b => b.onclick = () => {
+      const i = F.r.quicks.indexOf(b.dataset.q);
+      if (i >= 0) F.r.quicks.splice(i, 1); else F.r.quicks.push(b.dataset.q);
+      b.classList.toggle('on', i < 0);
+    });
+    U.$$('.step-row button', ov).forEach(b => b.onclick = () => {
+      const t = b.dataset.t, n = Math.max(0, Math.min(99, F.r.counts[t] + parseInt(b.dataset.d, 10)));
+      F.r.counts[t] = n; U.$('#n-' + t, ov).textContent = n; F.vib(15);
+    });
+  },
+  /* 我回報過的傷患（唯讀；後送由指揮所管制） */
+  renderCas() {
+    U.$('#tasks').hidden = true; U.$('#detail').hidden = true; U.$('#cas-view').hidden = false;
+    const d = F.s.data, box = U.$('#cas-view');
+    if (d.member.status !== '有效') { box.innerHTML = '<div class="empty">尚未確認身分，目前不能回報傷患。</div>'; return; }
+    const rows = (d.casualties || []).slice().sort((a, b) => (a.time < b.time ? 1 : -1));
+    if (!rows.length) { box.innerHTML = '<div class="empty">您還沒有回報過傷患。<br>發現傷患請按下方「回報傷患」。</div>'; return; }
+    box.innerHTML = rows.map(c => {
+      const grp = c.mode === '群體', col = grp ? '#455a64' : CFG.triageColor(c.triage);
+      const title = grp ? '多人：' + CFG.TRIAGE.filter(t => (+c[t.field] || 0) > 0).map(t => t.id + c[t.field]).join('　') : '檢傷 ' + c.triage + (c.quick ? '・' + c.quick : '');
+      const idx = CFG.TRANSPORT.findIndex(s => s.id === c.status);
+      return '<div class="cas-card" style="border-left-color:' + col + '"><div class="tt" style="color:' + col + '">' + U.esc(title) + '</div>' +
+        '<div class="tm hint">' + F.hm(c.time) + (c.desc ? '　' + U.esc(c.desc) : '') + '</div>' +
+        '<div class="flow">' + CFG.TRANSPORT.map((s, i) => '<span class="' + (i === idx ? 'on' : i < idx ? 'past' : '') + '">' + s.id + '</span>').join('') + '</div>' +
+        (c.vehicle || c.hospital ? '<div class="hint" style="margin-top:6px">' + (c.vehicle ? '🚑 ' + U.esc(c.vehicle) : '') + (c.hospital ? '　🏥 ' + U.esc(c.hospital) : '') + '</div>' : '') + '</div>';
+    }).join('');
   },
 
   /* ---------- 加入案件 ---------- */

@@ -1,6 +1,6 @@
 /* 主程式：狀態、同步、設定、工具分頁 */
 const App = {
-  state: { cases: [], cur: null, zones: [], units: [], members: [], tasks: [], reports: [], roster: null, version: 0, readonly: false },
+  state: { cases: [], cur: null, zones: [], units: [], members: [], tasks: [], reports: [], casualties: [], roster: null, version: 0, readonly: false },
   busy: 0,
   pollTimer: null,
 
@@ -11,6 +11,7 @@ const App = {
     Cases.bindList();
     Deploy.bind();
     Tasks.bind();
+    Casualties.bind();
     App.bindUi();
     App.updateModeBadge();
     Zones.renderList();
@@ -99,6 +100,7 @@ const App = {
     App.state.members = r.members || [];
     App.state.tasks = r.tasks || [];
     App.state.reports = r.reports || [];
+    App.state.casualties = (r.casualties || []).map(c => Object.assign(c, { red: +c.red || 0, yellow: +c.yellow || 0, green: +c.green || 0, black: +c.black || 0 }));
   },
   /* 案件資料有變（結案、改名…）時更新畫面 */
   applyCase(c) {
@@ -118,7 +120,7 @@ const App = {
     document.body.classList.toggle('readonly', App.state.readonly);
   },
   leaveCase() {
-    App.state.cur = null; App.state.zones = []; App.state.units = []; App.state.members = []; App.state.tasks = []; App.state.reports = [];
+    App.state.cur = null; App.state.zones = []; App.state.units = []; App.state.members = []; App.state.tasks = []; App.state.reports = []; App.state.casualties = [];
     App.state.roster = null; App.state.readonly = false; App.state.version = 0;
     MapView.clearAll(); MapView.setReadonly(false);
     U.store.del('ccs_last_case');

@@ -77,6 +77,21 @@ const CFG = {
     { id: '執行中', color: '#ef6c00' },
     { id: '撤離', color: '#9e9e9e' }
   ],
+  // 檢傷分級
+  TRIAGE: [
+    { id: '紅', color: '#d32f2f', text: '立即', field: 'red' },
+    { id: '黃', color: '#f9a825', text: '延遲', field: 'yellow' },
+    { id: '綠', color: '#2e7d32', text: '輕傷', field: 'green' },
+    { id: '黑', color: '#212121', text: '死亡／無生命徵象', field: 'black' }
+  ],
+  // 後送流程（順序即流程）：time 為記錄該階段時間的欄位
+  TRANSPORT: [
+    { id: '發現', time: 'tFound' },
+    { id: '處置', time: 'tTreated' },
+    { id: '後送中', time: 'tTransporting' },
+    { id: '已到院', time: 'tArrived' }
+  ],
+  CASUALTY_QUICKS: ['意識清楚', '無意識', '出血', '骨折', '失溫', '呼吸困難', '外傷', '燒燙傷', '中暑', '脫水', '無法行走'],
   UNIT_CATS: ['分隊', '義消', '外部支援'],
 
   GEOM_NAMES: { Point: '標記點', LineString: '線', Polygon: '面', Circle: '圓' },
@@ -88,6 +103,10 @@ const CFG = {
 CFG.typeColor = function (t) {
   const f = CFG.CASE_TYPES.find(x => x.id === t);
   return f ? f.color : '#616161';
+};
+CFG.triageColor = function (t) {
+  const f = CFG.TRIAGE.find(x => x.id === t);
+  return f ? f.color : '#757575';
 };
 CFG.taskColor = function (s) {
   const f = CFG.TASK_STATUS.find(x => x.id === s);
