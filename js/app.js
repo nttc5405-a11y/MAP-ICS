@@ -230,7 +230,7 @@ const App = {
 
   /* ---------- 唯讀看板連結 ---------- */
   boardUrl(c) {
-    const u = new URL('board.html', location.href);
+    const u = new URL('board.html', CFG.PUBLIC_URL || location.href);
     u.searchParams.set('case', c.id); u.searchParams.set('view', c.viewCode);
     return u.toString();
   },

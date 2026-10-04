@@ -3,6 +3,9 @@ const CFG = {
   VERSION: '0.1.0',
   // GAS 網頁應用程式網址（結尾 /exec）。填在這裡，所有人（含手機現場版、唯讀看板）開網頁就直接連到後端，
   // 不用再各自設定。留空 = 本機試用模式。注意：管理權杖不要寫在這裡（見 README）。
+  // 對外公開的網站網址（GitHub Pages）。QR Code 與唯讀看板連結一律以此為準，
+  // 這樣即使指揮所是用 localhost 或本機檔案開網頁，手機掃到的也是能連上的網址。留空 = 以目前網址為準。
+  PUBLIC_URL: 'https://nttc5405-a11y.github.io/MAP-ICS/',
   GAS_URL: 'https://script.google.com/macros/s/AKfycbykl7wBA9dQvnnY8YnSzlgrPb4dUIgksLIcESkwQk2oqFb8SO63gITRt3p_iZraUDkU3A/exec',
   DEFAULT_CENTER: [22.75, 121.15],   // 台東縣
   DEFAULT_ZOOM: 10,

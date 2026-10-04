@@ -278,7 +278,7 @@ const Deploy = {
 
   /* ---------- 案件 QR Code ---------- */
   joinUrl(c) {
-    const u = new URL('field.html', location.href);
+    const u = new URL('field.html', CFG.PUBLIC_URL || location.href);
     u.searchParams.set('case', c.id); u.searchParams.set('code', c.joinCode);
     return u.toString();
   },
