@@ -314,7 +314,8 @@ const F = {
       '<div class="field"><label>對應任務</label><select id="r-task"><option value="">（不屬於任何任務）</option>' + taskOpts + '</select></div>' +
       '<div class="field"><label>' + (isCas ? '簡述（選填）' : '狀況說明') + '</label><textarea id="r-text" maxlength="500" placeholder="' + (isCas ? '例：男性約 50 歲，左小腿變形' : '例：A 區北側發現足跡，往稜線方向') + '"></textarea></div>' +
       '<div class="field"><label>照片（最多 3 張）</label><div class="photos" id="r-photos"></div>' +
-      '<input id="r-file" type="file" accept="image/*" capture="environment" hidden></div>' +
+      '<input id="r-cam" type="file" accept="image/*" capture="environment" hidden>' +
+      '<input id="r-pick" type="file" accept="image/*" multiple hidden></div>' +
       '<div class="field"><label>位置（可拖曳圖釘修正）</label><div id="rmap"></div><div class="hint" id="r-pos"></div>' +
       '<button class="link-btn" id="r-gps">◎ 用目前 GPS 位置</button></div>' +
       '<div class="hint">位置只在送出這份回報時才會傳給指揮所，不會持續回傳您的位置。</div></div>' +
@@ -323,7 +324,8 @@ const F = {
     if (isCas) F.bindCasFields();
     U.$('#r-close').onclick = F.closeReport;
     U.$('#r-send').onclick = F.sendReport;
-    U.$('#r-file').addEventListener('change', F.onPhoto);
+    U.$('#r-cam').addEventListener('change', F.onPhoto);
+    U.$('#r-pick').addEventListener('change', F.onPhoto);
     U.$('#r-gps').onclick = () => {
       if (!F.s.gps) { U.toast('還沒有取得定位', 'err'); return; }
       F.setReportPos(F.s.gps.lat, F.s.gps.lng, true, true);
@@ -358,14 +360,31 @@ const F = {
     const box = U.$('#r-photos'); if (!box) return;
     box.innerHTML = F.r.photos.map((p, i) => '<div class="ph"><img src="' + p.preview + '" alt=""><button class="rm" data-i="' + i + '">✕</button>' + (p.id ? '<span class="ok">已上傳</span>' : '') + '</div>').join('') +
       (F.r.photos.length < 3 ? '<div class="ph add" id="r-add">📷</div>' : '');
-    const add = U.$('#r-add'); if (add) add.onclick = () => U.$('#r-file').click();
+    const add = U.$('#r-add'); if (add) add.onclick = F.choosePhoto;
     U.$$('.rm', box).forEach(b => b.onclick = () => { F.r.photos.splice(+b.dataset.i, 1); F.drawPhotos(); });
   },
+  /* 點「加照片」：讓使用者選「拍照」或「從相簿／檔案選取」 */
+  choosePhoto() {
+    const left = 3 - F.r.photos.length;
+    U.modal({
+      title: '加入照片（還可加 ' + left + ' 張）', html: '<p class="hint">拍照：直接開啟相機。相簿／檔案：從手機裡已有的照片選取，可一次選多張。</p>',
+      buttons: [
+        { text: '取消', value: false },
+        { text: '📷 拍照', cls: 'primary', onClick: () => U.$('#r-cam').click() },
+        { text: '🖼 相簿／檔案', cls: 'primary', onClick: () => U.$('#r-pick').click() }
+      ]
+    });
+  },
   async onPhoto(e) {
-    const f = e.target.files[0]; e.target.value = '';
-    if (!f || !F.r) return;
-    try { const c = await F.compress(f); F.r.photos.push({ preview: c.preview, b64: c.b64, id: null }); F.drawPhotos(); }
-    catch (err) { U.toast(err.message, 'err'); }
+    const files = Array.from(e.target.files || []); e.target.value = '';
+    if (!files.length || !F.r) return;
+    const room = 3 - F.r.photos.length;
+    if (files.length > room) U.toast('最多 3 張，只取前 ' + room + ' 張', 'err');
+    for (const f of files.slice(0, room)) {
+      try { const c = await F.compress(f); if (F.r) F.r.photos.push({ preview: c.preview, b64: c.b64, id: null }); }
+      catch (err) { U.toast(err.message, 'err'); }
+    }
+    if (F.r) F.drawPhotos();
   },
   /* 長邊 1600px、JPEG 品質 0.7（約 300～500KB） */
   compress(file) {

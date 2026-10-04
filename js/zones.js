@@ -111,7 +111,10 @@ const Zones = {
   openEditor(z, isNew) {
     const catOpts = CFG.ZONE_CATS.map(c =>
       '<option value="' + U.esc(c.id) + '"' + (c.id === z.category ? ' selected' : '') + '>' + U.esc(c.id) + '</option>').join('');
-    const chips = CFG.HAZARDS.map(h => '<button type="button" class="chip" data-h="' + U.esc(h) + '">' + U.esc(h) + '</button>').join('');
+    // 危險因子快選：該案件類型專屬的在前面，後面接通用清單（去除重複）
+    const ctype = App.state.cur && App.state.cur.type, hz = [];
+    ((CFG.HAZARDS_BY_TYPE && CFG.HAZARDS_BY_TYPE[ctype]) || []).concat(CFG.HAZARDS).forEach(h => { if (hz.indexOf(h) < 0) hz.push(h); });
+    const chips = hz.map(h => '<button type="button" class="chip" data-h="' + U.esc(h) + '">' + U.esc(h) + '</button>').join('');
     const geomName = CFG.GEOM_NAMES[z.geomType] || z.geomType;
     const html =
       '<div class="form">' +
