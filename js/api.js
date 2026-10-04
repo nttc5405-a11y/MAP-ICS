@@ -56,6 +56,9 @@ const Api = {
     if (!d || !d.cases) d = { cases: [], zones: {}, logs: {} };
     ['units', 'members', 'tasks', 'reports', 'casualties', 'plans'].forEach(k => { d[k] = d[k] || {}; });
     if (!d.roster) d.roster = Api.sampleRoster();
+    const R = d.roster;   // 舊資料補齊「編組方案」欄位
+    R.baseName = R.baseName || '單位'; R.schemeNames = R.schemeNames || [R.baseName];
+    R.people.forEach(p => { p.schemes = p.schemes || {}; if (!(R.baseName in p.schemes)) p.schemes[R.baseName] = p.unit; });
     return d;
   },
   /* 本機試用的範例名冊（人名為虛構，請到「名冊管理」改成實際資料） */
@@ -68,7 +71,9 @@ const Api = {
       ['東河分隊', '張大雄', '分隊長'], ['長濱分隊', '黃建國', '隊員'], ['義消成功分隊', '吳俊傑', '分隊長'],
       ['空勤總隊', '周機長', '機長']];
     const people = names.map((n, i) => ({ id: 'P' + (i + 1), unit: n[0], name: n[1], title: n[2], order: i + 1, active: '是' }));
-    return { units: units, people: people, sample: true };
+    const grp = ['管理組', 'UCC', '搜救1組', '搜救2組', '醫療組', '場控組', '搜救1組', '搜救2組', '醫療組', '場控組'];
+    people.forEach((p, i) => { p.schemes = { 單位: p.unit, 人道救援: grp[i] }; });
+    return { units: units, people: people, sample: true, baseName: '單位', schemeNames: ['單位', '人道救援'] };
   },
   saveDb(d) {
     if (!U.store.set(Api.KEY_DB, JSON.stringify(d))) throw new Error('瀏覽器儲存空間已滿或被禁用，無法存檔');
@@ -209,8 +214,23 @@ const Api = {
       }
       /* ---------- 第 2 階段：名冊、部署、人員、任務、回報 ---------- */
       case 'getRoster': return d.roster;
+      case 'applyScheme': {   // 啟動編組（本機試用版）
+        const c = findCase(p.caseId); needOpen(c);
+        const scheme = String(p.scheme || '').trim(), R = d.roster;
+        if (scheme && R.schemeNames.indexOf(scheme) < 0) throw new Error('名冊裡沒有「' + scheme + '」這個編組方案');
+        const gmap = {}, groups = [];
+        R.people.forEach(x => { const g = scheme && x.schemes[scheme]; if (g) { gmap[x.name + '|' + x.unit] = g; if (groups.indexOf(g) < 0) groups.push(g); } });
+        const units = lst('units', c.id), have = {}; units.forEach(u => { have[u.name] = 1; });
+        const added = groups.filter(g => !have[g]).map(g => ({ id: 'G' + Api.hash(g), name: g, vehicles: '', leader: '', lat: '', lng: '', status: '待命', updated: U.now() }));
+        added.forEach(u => units.push(u));
+        let changed = 0;
+        lst('members', c.id).forEach(m => { if (m.status === '已撤銷') return; const g = gmap[m.name + '|' + m.unit]; if (g && m.group !== g) { m.group = g; changed++; } });
+        c.scheme = scheme;
+        log(c.id, p.actor, '啟動編組', c.id, (scheme || '依單位') + '：新增 ' + added.length + ' 個單位，調整 ' + changed + ' 人');
+        touch(c); Api.saveDb(d); return { version: c.version, scheme: scheme, added: added.length, changed: changed };
+      }
       case 'saveRoster':
-        d.roster = { units: p.units || [], people: p.people || [] };
+        d.roster = { units: p.units || [], people: p.people || [], baseName: p.baseName || '單位', schemeNames: [p.baseName || '單位'].concat((p.schemeNames || []).filter(n => n !== (p.baseName || '單位'))) };
         Api.saveDb(d); return d.roster;
 
       case 'saveUnit': {
@@ -237,7 +257,7 @@ const Api = {
         if (dup) throw new Error(m.name + '（' + m.unit + '）已經在人員名單中');
         const rec = {
           id: U.uid('M'), name: m.name.trim(), unit: m.unit || '', identity: m.identity || '名冊', status: '有效',
-          group: m.group || m.unit || '', phone: m.phone || '', joined: U.now(), device: '指揮所代登', token: ''
+          group: m.group || Api.schemeGroup(d.roster.people.find(x => x.name === m.name.trim() && x.unit === (m.unit || '')), c.scheme) || m.unit || '', phone: m.phone || '', joined: U.now(), device: '指揮所代登', token: ''
         };
         lst('members', c.id).push(rec);
         log(c.id, p.actor, '代為加入人員', rec.id, rec.name + '（' + rec.unit + '）');
@@ -297,7 +317,7 @@ const Api = {
           if (m.device && m.device !== (p.device || '') && m.status !== '已撤銷') log(c.id, p.actor, '重複加入（第二支裝置）', m.id, m.name + '（' + m.unit + '）');
           m.status = '有效'; m.token = token; m.device = p.device || ''; m.joined = U.now();
         } else {
-          m = { id: U.uid('M'), name: person.name, unit: person.unit, identity: '名冊', status: '有效', group: person.unit, phone: '', joined: U.now(), device: p.device || '', token: token };
+          m = { id: U.uid('M'), name: person.name, unit: person.unit, identity: '名冊', status: '有效', group: Api.schemeGroup(person, c.scheme), phone: '', joined: U.now(), device: p.device || '', token: token };
           lst('members', c.id).push(m);
           log(c.id, person.name, '加入案件', m.id, person.name + '（' + person.unit + '）');
         }
@@ -569,6 +589,8 @@ const Api = {
     return r;
   },
 
+  schemeGroup(person, scheme) { return !person ? '' : (scheme && person.schemes && person.schemes[scheme]) || person.unit; },
+  hash(s) { let h = 5381; for (const ch of String(s)) h = ((h << 5) + h + ch.charCodeAt(0)) >>> 0; return h.toString(16).toUpperCase(); },
   casLabel(x) {
     if (x.mode === '群體') return '多人 ' + CFG.TRIAGE.filter(t => x[t.field] > 0).map(t => t.id + x[t.field]).join(' ');
     return '單人 檢傷' + x.triage + (x.quick ? '（' + x.quick + '）' : '');

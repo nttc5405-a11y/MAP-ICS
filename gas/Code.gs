@@ -19,7 +19,7 @@ function rootFolderId_() {
 var CASE_FIELDS = [
   ['id', '案件編號'], ['name', '案件名稱'], ['type', '類型'], ['place', '地點'], ['lat', '緯度'], ['lng', '經度'],
   ['commander', '指揮官'], ['status', '狀態'], ['start', '開始時間'], ['end', '結束時間'], ['note', '備註'],
-  ['sheetId', '試算表ID'], ['folderId', '資料夾ID'], ['joinCode', '加入碼'], ['version', '版本'], ['updated', '最後更新'], ['viewCode', '檢視碼'], ['passcode', '驗證碼']
+  ['sheetId', '試算表ID'], ['folderId', '資料夾ID'], ['joinCode', '加入碼'], ['version', '版本'], ['updated', '最後更新'], ['viewCode', '檢視碼'], ['passcode', '驗證碼'], ['scheme', '編組方案']
 ];
 var ZONE_FIELDS = [
   ['id', '區域ID'], ['name', '名稱'], ['category', '類別'], ['color', '顏色'], ['geomType', '幾何類型'],
@@ -82,7 +82,7 @@ var WRITE_ACTIONS = {
   regenJoinCode: 1, joinCase: 1, joinAsTemp: 1, saveTask: 1, deleteTask: 1, updateTaskStatus: 1, submitReport: 1,
   fieldTaskStatus: 1, fieldReport: 1, fieldPhoto: 1,
   saveCasualty: 1, deleteCasualty: 1, splitCasualty: 1, updateTransport: 1, fieldCasualty: 1,
-  savePlan: 1, deletePlan: 1, regenViewCode: 1
+  savePlan: 1, deletePlan: 1, regenViewCode: 1, applyScheme: 1
 };
 // 手機掃 QR 加入時還沒有個人權杖，改用「案件編號＋加入碼」驗證
 // 手機端的 field* 與 getMyStatus/getFieldData 不用管理權杖，改在函式內以個人權杖 memberToken 驗證
@@ -152,7 +152,7 @@ function doPost(e) {
     fieldPhoto: fieldPhoto_, getPhoto: getPhoto_,
     saveCasualty: saveCasualty_, deleteCasualty: deleteCasualty_, splitCasualty: splitCasualty_, updateTransport: updateTransport_,
     fieldCasualty: fieldCasualty_, savePlan: savePlan_, deletePlan: deletePlan_,
-    regenViewCode: regenViewCode_, getBoardVersion: getBoardVersion_, getBoardData: getBoardData_
+    regenViewCode: regenViewCode_, applyScheme: applyScheme_, getBoardVersion: getBoardVersion_, getBoardData: getBoardData_
   };
   var fn = handlers[req.action];
   if (!fn) return json_({ ok: false, error: '不認得的動作：' + req.action });
@@ -517,22 +517,79 @@ function fillRosterIds_(sh, fields, prefix, keyFn) {
   });
   return rows;
 }
+/** 人員名冊的固定欄位；其餘每一欄都是一種「編組方案」（欄名＝方案名，格內＝該方案下的組別），
+ *  例如「消防勤務」欄＝平常單位（台東分隊）、「人道救援」欄＝人道救援任務的編組（管理組／UCC／搜救1組…）。
+ *  「單位」欄（沒有就取第一個方案欄）視為基本單位。 */
+var PEOPLE_FIXED = { '人員ID': 'id', '姓名': 'name', '職務': 'title', '排序': 'order', '啟用': 'active' };
+function md5_8_(str) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, str, Utilities.Charset.UTF_8)
+    .map(function (b) { return ('0' + (b & 255).toString(16)).slice(-2); }).join('').slice(0, 8).toUpperCase();
+}
+function readPeople_(sh) {
+  if (sh.getLastColumn() < 1) return { people: [], schemeNames: ['單位'], baseName: '單位' };
+  var hs = headers_(sh), idCol = hs.indexOf('人員ID');
+  if (idCol < 0) { sh.getRange(1, hs.length + 1).setValue('人員ID'); hs.push('人員ID'); idCol = hs.length - 1; }
+  var extra = [];
+  hs.forEach(function (h, i) { if (h && !PEOPLE_FIXED[h]) extra.push({ name: h, col: i }); });
+  var base = '單位', hasUnit = extra.some(function (e) { return e.name === '單位'; });
+  if (!hasUnit && extra.length) base = extra[0].name;
+  var last = sh.getLastRow(), vals = last > 1 ? sh.getRange(2, 1, last - 1, hs.length).getValues() : [], used = {}, people = [];
+  vals.forEach(function (r) { var id = String(r[idCol] || ''); if (id) used[id] = 1; });
+  vals.forEach(function (r, i) {
+    var p = { _row: i + 2, id: '', name: '', title: '', order: '', active: '', unit: '', schemes: {} };
+    hs.forEach(function (h, k) { if (PEOPLE_FIXED[h]) p[PEOPLE_FIXED[h]] = String(r[k] == null ? '' : r[k]).trim(); });
+    extra.forEach(function (e) { p.schemes[e.name] = String(r[e.col] == null ? '' : r[e.col]).trim(); });
+    p.unit = p.schemes[base] || '';
+    if (!p.name) return;
+    if (!p.id) {   // 空白的人員ID自動補上（用內容算出固定短碼）
+      var h8 = md5_8_(p.unit + '|' + p.name), id = 'P' + h8, n = 1;
+      while (used[id]) { id = 'P' + h8 + n; n++; }
+      used[id] = 1; p.id = id; sh.getRange(p._row, idCol + 1).setValue(id);
+    }
+    people.push(p);
+  });
+  return { people: people, schemeNames: extra.map(function (e) { return e.name; }), baseName: base };
+}
 function getRoster_() {
   var ss = master_();
   var strip = function (r) { delete r._row; return r; };
   var units = fillRosterIds_(ss.getSheetByName('單位名冊'), ROSTER_UNIT_FIELDS, 'U', function (r) { return r.name ? r.name : ''; });
-  var people = fillRosterIds_(ss.getSheetByName('人員名冊'), ROSTER_PEOPLE_FIELDS, 'P', function (r) { return r.name ? r.unit + '|' + r.name : ''; });
-  return { units: units.map(strip), people: people.map(strip) };
+  var rp = readPeople_(ss.getSheetByName('人員名冊'));
+  return { units: units.map(strip), people: rp.people.map(strip), schemeNames: rp.schemeNames, baseName: rp.baseName };
+}
+/** 某人在某個編組方案下的組別；沒設定就回到他的單位 */
+function schemeGroup_(person, scheme) {
+  return (scheme && person.schemes && person.schemes[scheme]) ? person.schemes[scheme] : person.unit;
 }
 function replaceRows_(sh, fields, objs) {
   var last = sh.getLastRow();
   if (last > 1) sh.getRange(2, 1, last - 1, sh.getLastColumn()).clearContent();
   appendRows_(sh, fields, objs.map(function (o) { return pick_(fields, o); }));
 }
+function writePeople_(sh, people, baseName, schemeNames) {
+  var hs = sh.getLastColumn() > 0 ? headers_(sh) : [];
+  ['人員ID', '姓名', '職務', '排序', '啟用', baseName].concat(schemeNames).forEach(function (h) { if (h && hs.indexOf(h) < 0) hs.push(h); });
+  if (sh.getMaxColumns() < hs.length) sh.insertColumnsAfter(sh.getMaxColumns(), hs.length - sh.getMaxColumns());
+  sh.getRange(1, 1, 1, hs.length).setValues([hs]).setFontWeight('bold').setBackground('#eceff1');
+  sh.setFrozenRows(1);
+  var last = sh.getLastRow();
+  if (last > 1) sh.getRange(2, 1, last - 1, hs.length).clearContent();
+  var rows = people.map(function (p) {
+    return hs.map(function (h) {
+      if (PEOPLE_FIXED[h]) return p[PEOPLE_FIXED[h]] == null ? '' : String(p[PEOPLE_FIXED[h]]);
+      if (h === baseName) return String(p.unit || '');
+      return String((p.schemes && p.schemes[h]) || '');
+    });
+  });
+  if (rows.length) {
+    if (sh.getMaxRows() < rows.length + 1) sh.insertRowsAfter(sh.getMaxRows(), rows.length + 1 - sh.getMaxRows());
+    sh.getRange(2, 1, rows.length, hs.length).setNumberFormat('@').setValues(rows);
+  }
+}
 function saveRoster_(req) {
   var ss = master_();
   replaceRows_(ss.getSheetByName('單位名冊'), ROSTER_UNIT_FIELDS, req.units || []);
-  replaceRows_(ss.getSheetByName('人員名冊'), ROSTER_PEOPLE_FIELDS, req.people || []);
+  writePeople_(ss.getSheetByName('人員名冊'), req.people || [], req.baseName || '單位', req.schemeNames || []);
   return getRoster_();
 }
 
@@ -574,8 +631,10 @@ function addMember_(req) {
   readAll_(sh, MEMBER_FIELDS).forEach(function (x) {
     if (x.name === name && x.unit === (m.unit || '') && x.status !== '已撤銷') throw new Error(name + '（' + (m.unit || '') + '）已經在人員名單中');
   });
+  var rp = null;
+  getRoster_().people.forEach(function (x) { if (x.name === name && x.unit === (m.unit || '')) rp = x; });
   var rec = { id: newMemberId_(), name: name, unit: m.unit || '', identity: m.identity || '名冊', status: '有效',
-    group: m.group || m.unit || '', phone: m.phone || '', joined: nowStr_(), device: '指揮所代登', token: '' };
+    group: m.group || (rp ? schemeGroup_(rp, c.scheme) : (m.unit || '')), phone: m.phone || '', joined: nowStr_(), device: '指揮所代登', token: '' };
   appendRows_(sh, MEMBER_FIELDS, [rec]);
   logEvent_(ss, req.actor, '代為加入人員', rec.id, name + '（' + rec.unit + '）');
   return { member: rec, version: bump_(c) };
@@ -643,7 +702,7 @@ function joinCase_(req) {
     m.status = '有效'; m.token = token; m.device = req.device || ''; m.joined = nowStr_();
     writeRow_(sh, MEMBER_FIELDS, m._row, m);
   } else {
-    m = { id: newMemberId_(), name: person.name, unit: person.unit, identity: '名冊', status: '有效', group: person.unit,
+    m = { id: newMemberId_(), name: person.name, unit: person.unit, identity: '名冊', status: '有效', group: schemeGroup_(person, c.scheme),
       phone: '', joined: nowStr_(), device: req.device || '', token: token };
     appendRows_(sh, MEMBER_FIELDS, [m]);
     logEvent_(ss, person.name, '加入案件', m.id, person.name + '（' + person.unit + '）');
@@ -1026,4 +1085,37 @@ function getBoardData_(req) {
     }),
     version: Number(c.version) || 0
   };
+}
+
+
+/* =====================================================================
+ * 啟動編組：把名冊裡某個「編組方案」套用到這個案件
+ * 1) 該方案的每個組別建立成可派遣的單位（待命）  2) 已在案件裡的人員改歸入該方案的組別
+ * 之後加入的名冊人員也會自動歸入該方案的組別。scheme 傳空字串＝回到依單位編組。
+ * ===================================================================== */
+function applyScheme_(req) {
+  var c = openCaseForWrite_(req.caseId), ss = caseSs_(c), scheme = String(req.scheme || '').trim();
+  var roster = getRoster_();
+  if (scheme && roster.schemeNames.indexOf(scheme) < 0) throw new Error('名冊裡沒有「' + scheme + '」這個編組方案');
+  var gmap = {}, groups = [];
+  roster.people.forEach(function (p) {
+    var g = scheme && p.schemes[scheme];
+    if (g) { gmap[p.name + '|' + p.unit] = g; if (groups.indexOf(g) < 0) groups.push(g); }
+  });
+  var shU = sheet_(ss, '單位部署'), have = {};
+  readAll_(shU, UNIT_FIELDS).forEach(function (u) { have[u.name] = 1; });
+  var added = groups.filter(function (g) { return !have[g]; }).map(function (g) {
+    return { id: 'G' + md5_8_(g), name: g, vehicles: '', leader: '', coord: '', status: '待命', updated: nowStr_() };
+  });
+  appendRows_(shU, UNIT_FIELDS, added);
+  var shM = sheet_(ss, '案件人員'), changed = 0;
+  readAll_(shM, MEMBER_FIELDS).forEach(function (m) {
+    if (m.status === '已撤銷') return;
+    var g = gmap[m.name + '|' + m.unit];
+    if (g && m.group !== g) { m.group = g; writeRow_(shM, MEMBER_FIELDS, m._row, m); changed++; }
+  });
+  c.scheme = scheme;
+  writeRow_(indexSheet_(), CASE_FIELDS, c._row, c);
+  logEvent_(ss, req.actor, '啟動編組', c.id, (scheme || '依單位') + '：新增 ' + added.length + ' 個單位，調整 ' + changed + ' 人');
+  return { version: bump_(c), scheme: scheme, added: added.length, changed: changed };
 }

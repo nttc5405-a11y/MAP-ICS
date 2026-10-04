@@ -267,6 +267,7 @@ details summary { cursor: pointer; font-size: 13px; color: #1565c0; margin: 4px 
 .link-btn { background: none; border: 0; color: #1565c0; cursor: pointer; font-size: 14px; }
 /* 登入前把主畫面藏起來，避免閃現 */
 body.logged-out #topbar, body.logged-out #main { visibility: hidden; }
+.sc-preview { display: flex; flex-wrap: wrap; gap: 6px; }
 .adv { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: #fafbfc; }
 .adv label { margin-top: 8px; }
 .file-row { font-size: 13px; color: var(--sub); }

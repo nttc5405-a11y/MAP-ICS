@@ -43,6 +43,7 @@ const Deploy = {
     U.$('#btn-add-member').addEventListener('click', Deploy.addMemberDialog);
     U.$('#btn-qr').addEventListener('click', Deploy.qrDialog);
     U.$('#btn-roster').addEventListener('click', Deploy.rosterDialog);
+    U.$('#btn-scheme').addEventListener('click', Deploy.schemeDialog);
     U.$('#unit-list').addEventListener('click', Deploy.onUnitClick);
     U.$('#unit-list').addEventListener('change', Deploy.onUnitChange);
     U.$('#member-list').addEventListener('click', Deploy.onMemberClick);
@@ -170,6 +171,7 @@ const Deploy = {
   /* ---------- 人員 ---------- */
   renderMembers() {
     const box = U.$('#member-list'); if (!box) return;
+    const si = U.$('#scheme-info'); if (si) si.textContent = '目前編組方案：' + ((App.state.cur && App.state.cur.scheme) || '依單位（預設）');
     const ro = App.state.readonly, ms = App.state.members;
     const pending = ms.filter(m => m.status === '待確認'), active = ms.filter(m => m.status === '有效'), revoked = ms.filter(m => m.status === '已撤銷');
     const info = m => U.esc(m.unit || '（未填單位）') + '・' + U.esc(m.identity) + (m.phone ? '・' + U.esc(m.phone) : '');
@@ -229,7 +231,8 @@ const Deploy = {
       const units = roster.units.slice();
       if (!units.some(u => u.name === unit)) units.push({ id: U.uid('U'), name: unit, category: '外部支援', vehicles: '', order: units.length + 1 });
       const people = roster.people.concat([{ id: U.uid('P'), unit: unit, name: m.name, title: '', order: roster.people.length + 1, active: '是' }]);
-      App.state.roster = await App.run(() => Api.call('saveRoster', { units: units, people: people }));
+      const rbase = roster.baseName || '單位';
+      App.state.roster = await App.run(() => Api.call('saveRoster', { units: units, people: people, baseName: rbase, schemeNames: (roster.schemeNames || []).filter(n => n !== rbase) }));
       U.toast('已將 ' + m.name + '（' + unit + '）加入名冊', 'ok');
       Deploy.renderAll();
     } catch (e) { U.toast('加入名冊失敗：' + e.message, 'err'); }
@@ -346,15 +349,50 @@ const Deploy = {
     });
   },
 
+  /* ---------- 啟動編組：把名冊的某個編組方案套用到這個案件 ---------- */
+  async schemeDialog() {
+    if (!App.needCase(true)) return;
+    const roster = await Deploy.ensureRoster(true), cur = App.state.cur.scheme || '';
+    const names = roster.schemeNames || [];
+    const info = n => {
+      const g = {}; roster.people.forEach(p => { const k = (p.schemes || {})[n]; if (k) g[k] = (g[k] || 0) + 1; });
+      return g;
+    };
+    if (!names.length) { U.toast('名冊裡還沒有任何編組方案。請到「名冊管理」或直接在試算表人員名冊多加一欄。', 'err'); return; }
+    const html = '<div class="form"><div class="hint">目前：<b>' + U.esc(cur || '依單位（預設）') + '</b></div>' +
+      '<label>要啟動的編組方案<select id="sc-name">' + names.map(n => '<option' + (n === cur ? ' selected' : '') + '>' + U.esc(n) + '</option>').join('') + '</select></label>' +
+      '<div id="sc-preview" class="sc-preview"></div>' +
+      '<div class="hint">按下後：①該方案的每個組別會建立成可派遣的單位（待命）；②已在這個案件裡的人員，改歸入他在該方案下的組別；③之後加入的名冊人員也會自動歸組。已派出的任務不受影響，但切換方案前請確認沒有進行中的任務用到舊組別。</div></div>';
+    const v = await U.modal({
+      title: '啟動編組', html: html, wide: true,
+      onOpen: el => {
+        const draw = () => {
+          const g = info(U.$('#sc-name', el).value), keys = Object.keys(g);
+          U.$('#sc-preview', el).innerHTML = keys.length ? keys.map(k => '<span class="chip">' + U.esc(k) + '（' + g[k] + ' 人）</span>').join('') : '<span class="warn">這個方案下沒有任何人有組別</span>';
+        };
+        U.$('#sc-name', el).addEventListener('change', draw); draw();
+      },
+      buttons: [{ text: '取消', value: false }, { text: '啟動', cls: 'primary', value: el => ({ scheme: U.$('#sc-name', el).value }) }]
+    });
+    if (!v || typeof v !== 'object') return;
+    const r = await Deploy.w('applyScheme', { scheme: v.scheme });
+    if (r) {
+      await App.reloadCase(true);
+      U.toast('已啟動「' + v.scheme + '」：新增 ' + r.added + ' 個單位，調整 ' + r.changed + ' 人', 'ok');
+    }
+  },
+
   /* ---------- 名冊管理 ---------- */
   async rosterDialog() {
     const roster = await Deploy.ensureRoster(true);
     const uText = roster.units.map(u => [u.name, u.category, u.vehicles].join(',')).join('\n');
-    const pText = roster.people.map(p => [p.unit, p.name, p.title].join(',')).join('\n');
+    const base = roster.baseName || '單位', extras = (roster.schemeNames || []).filter(n => n !== base);
+    const pText = [[base, '姓名', '職務'].concat(extras).join(',')].concat(roster.people.map(p => [p.unit, p.name, p.title].concat(extras.map(n => (p.schemes || {})[n] || '')).join(','))).join('\n');
     const html = '<div class="form">' +
       (roster.sample ? '<div class="warn">目前是範例名冊（虛構姓名）。請貼上實際資料後儲存。</div>' : '') +
       '<div class="hint">一行一筆，欄位用逗號或 Tab 分隔（可直接從 Excel 複製貼上）。<b>只貼人員也可以</b>：人員表裡出現的單位會自動建立；單位表是選填，只在要設定類別（分隊／義消／外部支援）或車輛時才需要。</div>' +
-'<label>人員：單位, 姓名, 職務　<span class="hint">（ID 由系統自動產生）</span><textarea id="ro-people" rows="10" spellcheck="false">' + U.esc(pText) + '</textarea></label>' +
+'<div class="hint"><b>編組方案</b>：在人員表第一行（標題列）的「職務」後面再加欄位，欄名＝方案名（例：人道救援），每個人填他在該方案下的組別（管理組、UCC、搜救1組…）。建立案件後可用「啟動編組」套用。</div>' +
+      '<label>人員：單位, 姓名, 職務, ［編組方案…］　<span class="hint">（ID 由系統自動產生）</span><textarea id="ro-people" rows="10" spellcheck="false">' + U.esc(pText) + '</textarea></label>' +
       '<div class="file-row">或從檔案載入人員（CSV／TXT）：<input type="file" accept=".csv,.txt,.tsv" data-fill="ro-people"></div>' +
       '<details class="adv"><summary>進階：單位類別與車輛（一般不用填）</summary>' +
       '<label>單位：名稱, 類別（分隊／義消／外部支援）, 車輛<textarea id="ro-units" rows="7" spellcheck="false">' + U.esc(uText) + '</textarea></label>' +
@@ -382,9 +420,16 @@ const Deploy = {
       const ex = oldU.find(x => x.name === r[0]);
       return { id: ex ? ex.id : U.uid('U'), name: r[0], category: r[1] || '分隊', vehicles: r[2] || '', order: i + 1 };
     });
-    const people = rows(v.p).filter(r => r[1]).map((r, i) => {
+    // 人員表：第一行若是標題列（第二欄＝姓名），第 4 欄起的欄名就是「編組方案」
+    const praw = v.p.replace(/^\uFEFF/, '').split(/\r?\n/).map(l => l.split(/[\t,，]/).map(x => x.trim().replace(/^"|"$/g, ''))).filter(r => r.some(x => x));
+    const header = praw.length && praw[0][1] === '姓名' ? praw[0] : null;
+    const baseName = (header && header[0] && header[0] !== '單位名稱') ? header[0] : (roster.baseName || '單位');
+    const schemeNames = header ? header.slice(3).filter(Boolean) : (roster.schemeNames || []).filter(n => n !== baseName);
+    const people = praw.filter(r => r !== header && r[1]).map((r, i) => {
       const ex = oldP.find(x => x.unit === r[0] && x.name === r[1]);
-      return { id: ex ? ex.id : U.uid('P'), unit: r[0], name: r[1], title: r[2] || '', order: i + 1, active: '是' };
+      const schemes = {};
+      schemeNames.forEach((n, k) => { schemes[n] = header ? (r[3 + k] || '') : ((ex && ex.schemes && ex.schemes[n]) || ''); });
+      return { id: ex ? ex.id : U.uid('P'), unit: r[0], name: r[1], title: r[2] || '', order: i + 1, active: '是', schemes: schemes };
     });
     // 人員名冊裡出現、但單位表沒有的單位，自動建立（類別依名稱推測，之後可在單位表修改）
     const guessCat = n => /義消|義勇/.test(n) ? '義消' : /空勤|民間|支援|搜救隊|協會|山協/.test(n) ? '外部支援' : '分隊';
@@ -395,7 +440,7 @@ const Deploy = {
       }
     });
     try {
-      App.state.roster = await App.run(() => Api.call('saveRoster', { units: units, people: people }));
+      App.state.roster = await App.run(() => Api.call('saveRoster', { units: units, people: people, baseName: baseName, schemeNames: schemeNames }));
       U.toast('名冊已儲存：' + units.length + ' 個單位、' + people.length + ' 人', 'ok');
       Deploy.renderAll();
     } catch (e) { U.toast('儲存名冊失敗：' + e.message, 'err'); }
