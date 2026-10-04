@@ -73,7 +73,7 @@ const Mountain = {
         (z.quality ? '<div class="ui-sub">搜索品質：' + U.esc(z.quality) + '</div>' : '') +
         (z.hazard ? '<div class="zi-haz">⚠ ' + U.esc(z.hazard) + '</div>' : '') +
         '<div class="ui-sub">' + (a && a.units && a.units.length ? '指派：' + U.esc(a.units.map(Mountain.unitName).join('、')) + (a.method ? '（' + U.esc(a.method) + '）' : '') : '<i>尚未指派隊伍（搜救計畫）</i>') + '</div>' +
-        (cv ? '<div class="cov-bar"><i style="width:' + cv.pct + '%"></i><span>覆蓋率約 ' + cv.pct + '%（估算）</span></div>' : '') +
+        (cv ? '<div class="cov-bar"><i style="width:' + cv.pct + '%"></i><span>覆蓋率約 ' + cv.pct + '%（估算，依 ' + cv.n + ' 條搜索軌跡）</span></div>' : '') +
         '<div class="ui-btns"><button class="btn small" data-act="focus">定位</button><button class="btn small" data-act="cov">估算覆蓋率</button>' +
         (ro ? '' : '<button class="btn small" data-act="edit">編輯</button>') + '</div></div>';
     }).join('') + '</div>';
@@ -86,8 +86,8 @@ const Mountain = {
     else if (b.dataset.act === 'edit') Zones.edit(id);
     else if (b.dataset.act === 'cov') {
       const r = Mountain.estimate(id);
-      if (r == null) { U.toast('這個分區不是多邊形，或還沒有任何「搜索軌跡」可計算', 'err'); return; }
-      Mountain.cov[id] = { pct: r }; Mountain.renderSeg();
+      if (r.error) { U.toast(r.error, 'err'); return; }
+      Mountain.cov[id] = { pct: r.pct, n: r.tracks }; Mountain.renderSeg();
     }
   },
   onSegChange(e) {
@@ -98,10 +98,12 @@ const Mountain = {
 
   /* 覆蓋率估算：在分區內以格點取樣，距任一搜索軌跡 ≤ 50 m 的比例（TWD97 平面計算） */
   estimate(zoneId) {
-    const z = Zones.byId(zoneId), g = z && Zones.geometryOf(z);
-    if (!g || g.type !== 'Polygon') return null;
+    const z = Zones.byId(zoneId); let g = z && Zones.geometryOf(z);
+    if (!g) return { error: '找不到這個分區的圖形' };
+    if (z.geomType === 'Circle') g = U.circleToPolygon(g.coordinates[0], g.coordinates[1], Number(z.radius) || 1);   // 圓形分區轉成多邊形計算
+    if (g.type !== 'Polygon') return { error: '這個區域是點或線，不是「面」，無法估算覆蓋率。請把搜索區畫成多邊形、矩形或圓形。' };
     const tr = Mountain.tracks('搜索軌跡');
-    if (!tr.length) return null;
+    if (!tr.length) return { error: '還沒有任何「搜索軌跡」可以計算。請到「軌跡」分頁按「匯入軌跡」，匯入隊伍的 GPX，並在「匯入為」選「搜索軌跡」。' };
     const toXY = c => { const t = U.wgs84ToTwd97(c[1], c[0]); return [t.e, t.n]; };
     const ring = g.coordinates[0].map(toXY);
     const holes = g.coordinates.slice(1).map(r => r.map(toXY));
@@ -128,7 +130,7 @@ const Mountain = {
       if (!inRing(p, ring) || holes.some(h => inRing(p, h))) continue;
       total++; if (segs.length && near(x, y)) hit++;
     }
-    return total ? Math.round(hit / total * 1000) / 10 : 0;
+    return { pct: total ? Math.round(hit / total * 1000) / 10 : 0, tracks: tr.length };
   },
 
   /* ---------- 軌跡 ---------- */
