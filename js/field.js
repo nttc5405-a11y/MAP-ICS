@@ -29,7 +29,9 @@ const F = {
       try { await F.refresh(true); }
       catch (e) { if (F.s.token) { F.showJoinMsg('讀取失敗：' + e.message, true); } }
     } else await F.showJoin();
-    setInterval(F.poll, 17000);
+    const loop = () => setTimeout(async () => { await F.poll(); loop(); },
+      F.s.data && F.s.data.member && F.s.data.member.status !== '有效' ? 6000 : 17000);   // 等待確認時每 6 秒檢查
+    loop();
     document.addEventListener('visibilitychange', () => { if (!document.hidden) F.poll(); });
     F.startGps();
   },
@@ -101,7 +103,8 @@ const F = {
     U.$('#fh-me').textContent = d.member.name + '・' + (d.member.group || d.member.unit || '');
     const active = d.member.status === '有效', closed = d.case.status === '已結案';
     const bn = U.$('#banner');
-    if (!active) { bn.hidden = false; bn.className = 'banner'; bn.textContent = '⏳ 等待指揮所確認您的身分。目前可看地圖與區域，確認後才能收任務與回報。'; }
+    if (!active) { bn.hidden = false; bn.className = 'banner'; bn.innerHTML = '⏳ 等待指揮所確認您的身分。目前可看地圖與區域，確認後才能收任務與回報。<button id="b-recheck" class="link-btn" style="padding:4px 8px">重新檢查</button>';
+      U.$('#b-recheck').onclick = async () => { try { await F.refresh(false); U.toast(F.s.data.member.status === '有效' ? '已確認！' : '還在等待指揮所確認'); } catch (e) { U.toast('檢查失敗：' + e.message, 'err'); } }; }
     else if (closed) { bn.hidden = false; bn.className = 'banner info'; bn.textContent = '此案件已結案，僅供查看。'; }
     else bn.hidden = true;
     U.$('#btn-report').disabled = !active || closed;

@@ -323,14 +323,27 @@ const Deploy = {
       (roster.sample ? '<div class="warn">目前是範例名冊（虛構姓名）。請貼上實際資料後儲存。</div>' : '') +
       '<div class="hint">一行一筆，欄位用逗號或 Tab 分隔（可直接從 Excel 複製貼上）。</div>' +
       '<label>單位：名稱, 類別（分隊／義消／外部支援）, 車輛<textarea id="ro-units" rows="7" spellcheck="false">' + U.esc(uText) + '</textarea></label>' +
+      '<div class="file-row">或從檔案載入單位（CSV／TXT）：<input type="file" accept=".csv,.txt,.tsv" data-fill="ro-units"></div>' +
       '<label>人員：單位, 姓名, 職務<textarea id="ro-people" rows="10" spellcheck="false">' + U.esc(pText) + '</textarea></label>' +
+      '<div class="file-row">或從檔案載入人員（CSV／TXT）：<input type="file" accept=".csv,.txt,.tsv" data-fill="ro-people"></div>' +
       '<div class="hint">儲存會取代整份名冊，不影響已建立案件中的人員與部署。</div></div>';
     const v = await U.modal({
       title: '名冊管理', html: html, wide: true,
+      onOpen: el => {
+        U.$$('input[data-fill]', el).forEach(inp => inp.addEventListener('change', async () => {
+          const f = inp.files[0]; if (!f) return;
+          const buf = await f.arrayBuffer();
+          let text;
+          try { text = new TextDecoder('utf-8', { fatal: true }).decode(buf); }
+          catch (e) { text = new TextDecoder('big5').decode(buf); }   // Excel 另存的 CSV 若是 ANSI（Big5）也能讀
+          U.$('#' + inp.dataset.fill, el).value = text.replace(/^\uFEFF/, '').trim();
+          U.toast('已載入 ' + f.name + '，確認內容後按「儲存名冊」', 'ok');
+        }));
+      },
       buttons: [{ text: '取消', value: false }, { text: '儲存名冊', cls: 'primary', value: el => ({ u: U.$('#ro-units', el).value, p: U.$('#ro-people', el).value }) }]
     });
     if (!v || typeof v !== 'object') return;
-    const rows = t => t.split(/\r?\n/).map(l => l.split(/[\t,，]/).map(x => x.trim())).filter(r => r[0]);
+    const rows = t => t.replace(/^\uFEFF/, '').split(/\r?\n/).map(l => l.split(/[\t,，]/).map(x => x.trim().replace(/^"|"$/g, ''))).filter(r => r[0] && !(r[0] === '單位名稱' || r[0] === '名稱' || (r[0] === '單位' && r[1] === '姓名')));
     const oldU = roster.units, oldP = roster.people;
     const units = rows(v.u).map((r, i) => {
       const ex = oldU.find(x => x.name === r[0]);

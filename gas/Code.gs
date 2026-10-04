@@ -8,6 +8,13 @@ var TZ = 'Asia/Taipei';
 var BACKEND_VERSION = '0.1.0';
 var GEOJSON_CELL_MAX = 50000;
 
+// 案件資料夾與試算表要建在哪個 Drive 資料夾（填資料夾網址 /folders/ 後面那串）。
+// 留空 = 用 setup() 自動建立的「案件管制系統」資料夾。部署帳號必須對該資料夾有編輯權限。
+var ROOT_FOLDER_OVERRIDE = '1gcyApbtmQDuua7NvcyQfFwbw_8q-w4h_';
+function rootFolderId_() {
+  return ROOT_FOLDER_OVERRIDE || PropertiesService.getScriptProperties().getProperty('ROOT_FOLDER_ID');
+}
+
 /* ---------- 欄位結構（欄位名稱 = 試算表標題列） ---------- */
 var CASE_FIELDS = [
   ['id', '案件編號'], ['name', '案件名稱'], ['type', '類型'], ['place', '地點'], ['lat', '緯度'], ['lng', '經度'],
@@ -93,13 +100,14 @@ function setup() {
   var def = ss.getSheetByName('Sheet1') || ss.getSheetByName('工作表1');
   if (def && ss.getSheets().length > 1 && def.getLastRow() === 0) ss.deleteSheet(def);
 
-  if (!props.getProperty('ROOT_FOLDER_ID')) {
+  if (!ROOT_FOLDER_OVERRIDE && !props.getProperty('ROOT_FOLDER_ID')) {
     var root = DriveApp.createFolder('案件管制系統');
     props.setProperty('ROOT_FOLDER_ID', root.getId());
   }
+  if (ROOT_FOLDER_OVERRIDE) DriveApp.getFolderById(ROOT_FOLDER_OVERRIDE);   // 確認這個帳號讀得到該資料夾，讀不到會直接報錯
   if (!props.getProperty('API_TOKEN')) props.setProperty('API_TOKEN', newToken_());
   Logger.log('設定完成。\n管理權杖（API_TOKEN）：' + props.getProperty('API_TOKEN') +
-    '\n根資料夾：https://drive.google.com/drive/folders/' + props.getProperty('ROOT_FOLDER_ID') +
+    '\n根資料夾：https://drive.google.com/drive/folders/' + rootFolderId_() +
     '\n下一步：部署 → 新增部署作業 → 網頁應用程式。');
 }
 /** 忘記權杖時執行，記錄檔會顯示目前的權杖 */
@@ -309,8 +317,7 @@ function createCase_(req) {
   var f = req.fields || {};
   var name = String(f.name || '').trim();
   if (!name) throw new Error('請填寫案件名稱');
-  var props = PropertiesService.getScriptProperties();
-  var rootId = props.getProperty('ROOT_FOLDER_ID');
+  var rootId = rootFolderId_();
   if (!rootId) throw new Error('後端尚未初始化，請先執行 setup()');
 
   var idx = indexSheet_();

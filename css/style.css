@@ -234,6 +234,8 @@ body.readonly .leaflet-pm-toolbar { display: none; }
 .asg-units { display: flex; flex-wrap: wrap; gap: 2px 14px; margin: 4px 0; }
 .row3 { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 6px; }
 details summary { cursor: pointer; font-size: 13px; color: #1565c0; margin: 4px 0; }
+.file-row { font-size: 13px; color: var(--sub); }
+.file-row input { width: auto; font-size: 13px; }
 .ph-box { display: flex; flex-direction: column; gap: 10px; }
 .ph-box img { width: 100%; max-height: 70vh; object-fit: contain; border-radius: 8px; background: #111; }
 
