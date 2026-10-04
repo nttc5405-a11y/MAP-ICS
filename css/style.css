@@ -234,6 +234,12 @@ body.readonly .leaflet-pm-toolbar { display: none; }
 .asg-units { display: flex; flex-wrap: wrap; gap: 2px 14px; margin: 4px 0; }
 .row3 { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 6px; }
 details summary { cursor: pointer; font-size: 13px; color: #1565c0; margin: 4px 0; }
+.task-label-wrap { background: none; border: 0; }
+.task-label { position: absolute; transform: translate(-50%, -50%); background: rgba(255,255,255,.93); border-radius: 6px; padding: 2px 4px; box-shadow: 0 1px 4px rgba(0,0,0,.45); white-space: nowrap; font-size: 12.5px; font-weight: 700; pointer-events: none; }
+.task-label .tl-row { border-left: 5px solid #999; padding: 1px 6px; }
+.task-label .tl-row small { margin-left: 6px; font-weight: 400; color: #666; font-size: 11px; }
+.tip-hr { border: 0; border-top: 1px solid #ccc; margin: 4px 0; }
+.leaflet-tooltip { white-space: normal; width: max-content; min-width: 150px; max-width: 300px; }
 .file-row { font-size: 13px; color: var(--sub); }
 .file-row input { width: auto; font-size: 13px; }
 .ph-box { display: flex; flex-direction: column; gap: 10px; }

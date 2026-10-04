@@ -53,6 +53,7 @@ const MapView = {
     this.unitGroup = L.layerGroup().addTo(m);
     this.reportGroup = L.layerGroup().addTo(m);
     this.casGroup = L.layerGroup().addTo(m);
+    this.labelGroup = L.layerGroup().addTo(m);
     return m;
   },
 
@@ -149,8 +150,7 @@ const MapView = {
       const layer = this.layerFor(z);
       if (!layer) return;
       layer.zoneId = z.id;
-      layer.bindTooltip('<b>' + U.esc(z.name || z.category) + '</b><br>' + U.esc(z.category) +
-        (z.measure ? '<br>' + U.esc(z.measure) : '') + (z.hazard ? '<br>⚠ ' + U.esc(z.hazard) : ''), { sticky: true });
+      layer.bindTooltip(() => MapView.zoneTip(z.id), { sticky: true });
       layer.on('click', ev => {
         L.DomEvent.stopPropagation(ev);
         if (this._pickCb) this.firePick(ev.latlng); else this.select(z.id);
@@ -163,6 +163,7 @@ const MapView = {
       this.zoneGroup.addLayer(layer);
       this.layers[z.id] = layer;
     });
+    this.renderLabels();
     // 重畫會讓 Geoman 的編輯狀態消失，這裡恢復原本開著的模式
     if (!this.readonly) {
       if (wasModes.edit) this.map.pm.enableGlobalEditMode();
@@ -243,6 +244,33 @@ const MapView = {
     setTimeout(() => this.tempLayer.clearLayers(), 15000);
   },
 
+  /* ---------- 區域的游標提示與任務標籤 ---------- */
+  openTasksOf(zoneId) { return App.state.tasks.filter(t => t.zoneId === zoneId && t.status !== '完成'); },
+  zoneTip(zoneId) {
+    const z = Zones.byId(zoneId); if (!z) return '';
+    let h = '<b>' + U.esc(z.name || z.category) + '</b><br>' + U.esc(z.category) + (z.measure ? '<br>' + U.esc(z.measure) : '') + (z.hazard ? '<br>⚠ ' + U.esc(z.hazard) : '');
+    this.openTasksOf(zoneId).forEach(t => {
+      const c = Tasks.crew(t), col = CFG.taskColor(t.status);
+      h += '<hr class="tip-hr"><span class="tip-task" style="color:' + col + '">● ' + U.esc(t.title) + '</span>（' + U.esc(t.status) + '）' +
+        (c.unitNames.length ? '<br>單位：' + U.esc(c.unitNames.join('、')) : '') +
+        (c.members.length ? '<br>人員（' + c.members.length + '）：' + U.esc(c.members.slice(0, 12).map(m => m.name).join('、')) + (c.members.length > 12 ? '…' : '') : '') +
+        (t.hazard ? '<br>⚠ ' + U.esc(t.hazard) : '');
+    });
+    return h;
+  },
+  /* 有「未完成任務」的區域，在區域中央標出任務標題 */
+  renderLabels() {
+    if (!this.labelGroup) return;
+    this.labelGroup.clearLayers();
+    Object.keys(this.layers).forEach(zid => {
+      const tasks = this.openTasksOf(zid); if (!tasks.length) return;
+      const l = this.layers[zid];
+      const ll = l.getBounds ? l.getBounds().getCenter() : l.getLatLng();
+      const html = tasks.map(t => '<div class="tl-row" style="border-left-color:' + CFG.taskColor(t.status) + '">' + U.esc(t.title) + '<small>' + U.esc(t.status) + '</small></div>').join('');
+      this.labelGroup.addLayer(L.marker(ll, { interactive: false, zIndexOffset: 700, icon: L.divIcon({ className: 'task-label-wrap', html: '<div class="task-label">' + html + '</div>', iconSize: [0, 0] }) }));
+    });
+  },
+
   /* ---------- 單位標記與「點地圖選位置」 ---------- */
   unitIcon(u) {
     const col = CFG.unitColor(u.status);
@@ -306,6 +334,7 @@ const MapView = {
     if (this.unitGroup) this.unitGroup.clearLayers();
     if (this.reportGroup) this.reportGroup.clearLayers();
     if (this.casGroup) this.casGroup.clearLayers();
+    if (this.labelGroup) this.labelGroup.clearLayers();
     this.zoneGroup.clearLayers(); this.layers = {}; this.selectedId = null;
     if (this.caseMarker) { this.map.removeLayer(this.caseMarker); this.caseMarker = null; }
     this.tempLayer.clearLayers();

@@ -13,6 +13,35 @@ const Tasks = {
     ['#task-list', '#report-list'].forEach(sel => U.$(sel).addEventListener('click', Tasks.onRepClick, true));
   },
 
+  /* 任務編成：指派單位、單位內的有效人員、個別指派的人員 */
+  crew(t) {
+    const units = splitIds(t.assignUnits).map(id => Deploy.byId(id)).filter(Boolean);
+    const names = units.map(u => u.name);
+    const ms = App.state.members.filter(m => m.status === '有效');
+    const fromUnits = ms.filter(m => names.indexOf(m.group || m.unit) >= 0);
+    const direct = splitIds(t.assignPeople).map(id => Deploy.memberById(id)).filter(m => m && m.status === '有效');
+    const all = fromUnits.concat(direct.filter(m => fromUnits.indexOf(m) < 0));
+    return { units: units, unitNames: names, members: all };
+  },
+  /* 已被其他「未完成」任務佔用的單位與人員（排除正在編輯的那個任務）。回傳 { units: {id: 任務標題}, people: {id: 任務標題} } */
+  busy(excludeId) {
+    const units = {}, people = {};
+    App.state.tasks.filter(t => t.id !== excludeId && t.status !== '完成').forEach(t => {
+      splitIds(t.assignUnits).forEach(i => { units[i] = t.title; });
+      splitIds(t.assignPeople).forEach(i => { people[i] = t.title; });
+    });
+    // 整隊被派出去 → 隊上有效成員也算任務中
+    App.state.members.filter(m => m.status === '有效').forEach(m => {
+      const u = App.state.units.find(x => x.name === (m.group || m.unit));
+      if (u && units[u.id] && !people[m.id]) people[m.id] = units[u.id];
+    });
+    // 隊上有人被個別派出去 → 整隊不能再整隊派遣
+    App.state.members.filter(m => m.status === '有效' && people[m.id]).forEach(m => {
+      const u = App.state.units.find(x => x.name === (m.group || m.unit));
+      if (u && !units[u.id]) units[u.id] = m.name + ' 在「' + people[m.id] + '」';
+    });
+    return { units: units, people: people };
+  },
   unitNames(t) {
     return splitIds(t.assignUnits).map(id => { const u = Deploy.byId(id); return u ? u.name : '（已移除單位）'; });
   },
@@ -21,7 +50,7 @@ const Tasks = {
   },
 
   renderAll() {
-    Tasks.renderList(); Tasks.renderReports(); MapView.renderReports();
+    Tasks.renderList(); Tasks.renderReports(); MapView.renderReports(); MapView.renderLabels();
     const open = App.state.tasks.filter(t => t.status !== '完成').length;
     const b = U.$('#badge-tasks'); if (b) { b.textContent = open; b.hidden = !open; }
   },
@@ -124,9 +153,17 @@ const Tasks = {
     const isNew = !task, t = task || {};
     const selU = splitIds(t.assignUnits), selP = splitIds(t.assignPeople);
     const zones = App.state.zones.map(z => '<option value="' + U.esc(z.id) + '"' + (z.id === t.zoneId ? ' selected' : '') + '>' + U.esc((z.name || z.category) + '（' + z.category + '）') + '</option>').join('');
-    const units = App.state.units.map(u => '<label class="chk"><input type="checkbox" name="au" value="' + U.esc(u.id) + '"' + (selU.indexOf(u.id) >= 0 ? ' checked' : '') + '> ' + U.esc(u.name) + '</label>').join('');
-    const people = App.state.members.filter(m => m.status === '有效').map(m =>
-      '<label class="chk"><input type="checkbox" name="ap" value="' + U.esc(m.id) + '"' + (selP.indexOf(m.id) >= 0 ? ' checked' : '') + '> ' + U.esc(m.name) + ' <span class="hint">' + U.esc(m.group || m.unit) + '</span></label>').join('');
+    const busy = Tasks.busy(t.id);   // 已在其他未完成任務中的單位／人員不能再選
+    const units = App.state.units.map(u => {
+      const b = busy.units[u.id];
+      return '<label class="chk' + (b ? ' dis' : '') + '"><input type="checkbox" name="au" value="' + U.esc(u.id) + '"' + (b ? ' disabled' : (selU.indexOf(u.id) >= 0 ? ' checked' : '')) + '> ' + U.esc(u.name) +
+        (b ? ' <span class="hint">任務中：' + U.esc(b) + '</span>' : '') + '</label>';
+    }).join('');
+    const people = App.state.members.filter(m => m.status === '有效').map(m => {
+      const b = busy.people[m.id], un = App.state.units.find(x => x.name === (m.group || m.unit));
+      return '<label class="chk' + (b ? ' dis' : '') + '"><input type="checkbox" name="ap" value="' + U.esc(m.id) + '" data-unit="' + U.esc(un ? un.id : '') + '"' + (b ? ' disabled' : (selP.indexOf(m.id) >= 0 ? ' checked' : '')) + '> ' +
+        U.esc(m.name) + ' <span class="hint">' + U.esc(m.group || m.unit) + (b ? '・任務中：' + U.esc(b) : '') + '</span></label>';
+    }).join('');
     const html = '<div class="form">' +
       '<label>任務標題<input id="tk-title" type="text" maxlength="60" value="' + U.esc(t.title) + '" placeholder="例：搜索 A 區"></label>' +
       '<label>任務內容<textarea id="tk-content" rows="3" maxlength="500">' + U.esc(t.content) + '</textarea></label>' +
@@ -137,6 +174,16 @@ const Tasks = {
     const v = await U.modal({
       title: isNew ? '派遣任務' : '編輯任務', html: html, wide: true,
       onOpen: el => {
+        // 勾選整個單位時，該單位成員不需再個別勾選
+        const syncCrew = () => {
+          const on = {}; U.$$('input[name=au]:checked', el).forEach(x => { on[x.value] = 1; });
+          U.$$('input[name=ap]', el).forEach(p => {
+            const covered = p.dataset.unit && on[p.dataset.unit], lbl = p.closest('label');
+            if (covered) { p.checked = false; p.disabled = true; lbl.classList.add('dis'); }
+            else if (!lbl.querySelector('.hint').textContent.includes('任務中')) { p.disabled = false; lbl.classList.remove('dis'); }
+          });
+        };
+        U.$$('input[name=au]', el).forEach(x => x.addEventListener('change', syncCrew)); syncCrew();
         let auto = !t.hazard || (t.zoneId && Zones.byId(t.zoneId) && Zones.byId(t.zoneId).hazard === t.hazard);
         U.$('#tk-hazard', el).addEventListener('input', () => { auto = false; });
         U.$('#tk-zone', el).addEventListener('change', e => {
@@ -171,21 +218,35 @@ const Tasks = {
   /* ---------- 代登回報（依無線電內容輸入） ---------- */
   async reportDialog(taskId) {
     if (!App.needCase(true)) return;
-    const tasks = App.state.tasks.map(t => '<option value="' + U.esc(t.id) + '"' + (t.id === taskId ? ' selected' : '') + '>' + U.esc(t.title + '（' + t.status + '）') + '</option>').join('');
-    const names = App.state.members.filter(m => m.status === '有效').map(m => '<option value="' + U.esc(m.name) + '">').join('') +
-      App.state.units.map(u => '<option value="' + U.esc(u.name) + '">').join('');
+    const tasks = App.state.tasks.filter(t => t.status !== '完成' || t.id === taskId).map(t => '<option value="' + U.esc(t.id) + '"' + (t.id === taskId ? ' selected' : '') + '>' + U.esc(t.title + '（' + t.status + '）') + '</option>').join('');
+    // 回報者：選了任務就只能選該任務編組內的人（含單位本身）；沒選任務則可選全部有效人員
+    const whoOptions = tid => {
+      const task = tid && Tasks.byId(tid);
+      let opts;
+      if (task) {
+        const c = Tasks.crew(task);
+        opts = c.unitNames.map(n => ({ v: n, t: n + '（單位）' })).concat(c.members.map(m => ({ v: m.name + '（' + m.unit + '）', t: m.name + '（' + (m.group || m.unit) + '）' })));
+      } else {
+        opts = App.state.units.map(u => ({ v: u.name, t: u.name + '（單位）' })).concat(App.state.members.filter(m => m.status === '有效').map(m => ({ v: m.name + '（' + m.unit + '）', t: m.name + '（' + (m.group || m.unit) + '）' })));
+      }
+      return opts.length ? '<option value="">請選擇回報者</option>' + opts.map(o => '<option value="' + U.esc(o.v) + '">' + U.esc(o.t) + '</option>').join('') : '<option value="">（此任務尚無可選的人員）</option>';
+    };
     const sts = CFG.TASK_STATUS.map(s => '<option>' + s.id + '</option>').join('');
     const html = '<div class="form">' +
       '<label>對應任務<select id="rp-task"><option value="">（不屬於任何任務）</option>' + tasks + '</select></label>' +
-      '<div class="row2"><label>回報者（無線電呼號／姓名）<input id="rp-who" type="text" list="rp-names" maxlength="30"><datalist id="rp-names">' + names + '</datalist></label>' +
+      '<div class="row2"><label>回報者（限該任務的編組）<select id="rp-who">' + whoOptions(taskId) + '</select></label>' +
       '<label>同時更新任務狀態<select id="rp-status"><option value="">不變更</option>' + sts + '</select></label></div>' +
       '<label>回報內容<textarea id="rp-content" rows="4" maxlength="500" placeholder="例：A 區北側發現足跡，往稜線方向"></textarea></label>' +
       '<div class="hint">此為指揮所代登（來源記為「指揮所代登」）。照片上傳將於手機版階段提供。</div></div>';
     const v = await U.modal({
       title: '代登回報', html: html,
+      onOpen: el => { U.$('#rp-task', el).addEventListener('change', e => { U.$('#rp-who', el).innerHTML = whoOptions(e.target.value); }); },
       buttons: [{ text: '取消', value: false }, {
         text: '送出', cls: 'primary',
-        validate: el => { if (!U.$('#rp-content', el).value.trim() && !U.$('#rp-status', el).value) { U.toast('請填寫回報內容或選擇狀態', 'err'); return false; } },
+        validate: el => {
+          if (!U.$('#rp-who', el).value) { U.toast('請選擇回報者', 'err'); return false; }
+          if (!U.$('#rp-content', el).value.trim() && !U.$('#rp-status', el).value) { U.toast('請填寫回報內容或選擇狀態', 'err'); return false; }
+        },
         value: el => ({ taskId: U.$('#rp-task', el).value, who: U.$('#rp-who', el).value.trim(), status: U.$('#rp-status', el).value, content: U.$('#rp-content', el).value.trim() })
       }]
     });
