@@ -353,10 +353,10 @@ const Deploy = {
     const pText = roster.people.map(p => [p.unit, p.name, p.title].join(',')).join('\n');
     const html = '<div class="form">' +
       (roster.sample ? '<div class="warn">目前是範例名冊（虛構姓名）。請貼上實際資料後儲存。</div>' : '') +
-      '<div class="hint">一行一筆，欄位用逗號或 Tab 分隔（可直接從 Excel 複製貼上）。</div>' +
-      '<label>單位：名稱, 類別（分隊／義消／外部支援）, 車輛<textarea id="ro-units" rows="7" spellcheck="false">' + U.esc(uText) + '</textarea></label>' +
+      '<div class="hint">一行一筆，欄位用逗號或 Tab 分隔（可直接從 Excel 複製貼上）。<b>只貼人員也可以</b>：人員表裡出現的單位會自動建立；單位表是選填，只在要設定類別（分隊／義消／外部支援）或車輛時才需要。</div>' +
+      '<label>單位（選填）：名稱, 類別（分隊／義消／外部支援）, 車輛<textarea id="ro-units" rows="7" spellcheck="false">' + U.esc(uText) + '</textarea></label>' +
       '<div class="file-row">或從檔案載入單位（CSV／TXT）：<input type="file" accept=".csv,.txt,.tsv" data-fill="ro-units"></div>' +
-      '<label>人員：單位, 姓名, 職務<textarea id="ro-people" rows="10" spellcheck="false">' + U.esc(pText) + '</textarea></label>' +
+      '<label>人員：單位, 姓名, 職務　<span class="hint">（ID 由系統自動產生）</span><textarea id="ro-people" rows="10" spellcheck="false">' + U.esc(pText) + '</textarea></label>' +
       '<div class="file-row">或從檔案載入人員（CSV／TXT）：<input type="file" accept=".csv,.txt,.tsv" data-fill="ro-people"></div>' +
       '<div class="hint">儲存會取代整份名冊，不影響已建立案件中的人員與部署。</div></div>';
     const v = await U.modal({
@@ -384,6 +384,14 @@ const Deploy = {
     const people = rows(v.p).filter(r => r[1]).map((r, i) => {
       const ex = oldP.find(x => x.unit === r[0] && x.name === r[1]);
       return { id: ex ? ex.id : U.uid('P'), unit: r[0], name: r[1], title: r[2] || '', order: i + 1, active: '是' };
+    });
+    // 人員名冊裡出現、但單位表沒有的單位，自動建立（類別依名稱推測，之後可在單位表修改）
+    const guessCat = n => /義消|義勇/.test(n) ? '義消' : /空勤|民間|支援|搜救隊|協會|山協/.test(n) ? '外部支援' : '分隊';
+    people.forEach(p => {
+      if (p.unit && !units.some(u => u.name === p.unit)) {
+        const ex = oldU.find(x => x.name === p.unit);
+        units.push({ id: ex ? ex.id : U.uid('U'), name: p.unit, category: ex ? ex.category : guessCat(p.unit), vehicles: ex ? ex.vehicles : '', order: units.length + 1 });
+      }
     });
     try {
       App.state.roster = await App.run(() => Api.call('saveRoster', { units: units, people: people }));

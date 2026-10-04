@@ -450,13 +450,27 @@ function pick_(fields, src) {
 }
 
 /* ---------- 名冊（總表） ---------- */
+/** 名冊列若「ID」是空的就自動補上：用內容算出固定的短碼，同樣的單位／人員永遠得到同樣的 ID（並發讀取也不會不一致） */
+function fillRosterIds_(sh, fields, prefix, keyFn) {
+  var rows = readAll_(sh, fields), col = headers_(sh).indexOf(fields[0][1]) + 1, used = {};
+  rows.forEach(function (r) { if (r.id) used[r.id] = 1; });
+  rows.forEach(function (r) {
+    if (r.id || !keyFn(r)) return;
+    var h = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, keyFn(r), Utilities.Charset.UTF_8)
+      .map(function (b) { return ('0' + (b & 255).toString(16)).slice(-2); }).join('').slice(0, 8).toUpperCase();
+    var id = prefix + h, n = 1;
+    while (used[id]) { id = prefix + h + n; n++; }   // 同名同單位時加序號避免重複
+    used[id] = 1; r.id = id;
+    sh.getRange(r._row, col).setValue(id);
+  });
+  return rows;
+}
 function getRoster_() {
   var ss = master_();
   var strip = function (r) { delete r._row; return r; };
-  return {
-    units: readAll_(ss.getSheetByName('單位名冊'), ROSTER_UNIT_FIELDS).map(strip),
-    people: readAll_(ss.getSheetByName('人員名冊'), ROSTER_PEOPLE_FIELDS).map(strip)
-  };
+  var units = fillRosterIds_(ss.getSheetByName('單位名冊'), ROSTER_UNIT_FIELDS, 'U', function (r) { return r.name ? r.name : ''; });
+  var people = fillRosterIds_(ss.getSheetByName('人員名冊'), ROSTER_PEOPLE_FIELDS, 'P', function (r) { return r.name ? r.unit + '|' + r.name : ''; });
+  return { units: units.map(strip), people: people.map(strip) };
 }
 function replaceRows_(sh, fields, objs) {
   var last = sh.getLastRow();
