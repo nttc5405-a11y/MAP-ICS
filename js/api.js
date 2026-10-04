@@ -134,7 +134,7 @@ const Api = {
           id: day + '-' + ('00' + n).slice(-3), name: f.name.trim(), type: f.type || '其他', place: f.place || '',
           lat: f.lat == null ? '' : f.lat, lng: f.lng == null ? '' : f.lng, commander: f.commander || '',
           status: CFG.STATUS_OPEN, start: U.now(), end: '', note: f.note || '',
-          sheetId: 'local', folderId: 'local', joinCode: String(Math.floor(100000 + Math.random() * 900000)),
+          sheetId: 'local', folderId: 'local', joinCode: String(Math.floor(100000 + Math.random() * 900000)), viewCode: '',
           version: 1, updated: U.now()
         };
         d.cases.push(c); d.zones[c.id] = []; log(c.id, p.actor, '建立案件', c.id, c.name);
@@ -491,6 +491,43 @@ const Api = {
         const x = list.splice(i, 1)[0];
         log(c.id, p.actor, '刪除' + x.type, x.id, x.type + ' v' + x.version);
         touch(c); Api.saveDb(d); return { version: c.version };
+      }
+
+      /* ---------- 第 6 階段：唯讀看板（以檢視碼 viewCode 驗證，只回傳不含個資的資料） ---------- */
+      case 'regenViewCode': {
+        const c = findCase(p.caseId);
+        c.viewCode = p.disable ? '' : U.uid('V').toLowerCase() + Math.random().toString(36).slice(2, 8);
+        log(c.id, p.actor, p.disable ? '關閉唯讀看板連結' : '產生唯讀看板連結', c.id, '');
+        touch(c); Api.saveDb(d); return { viewCode: c.viewCode, version: c.version };
+      }
+      case 'getBoardVersion': {
+        const c = findCase(p.caseId);
+        if (!c.viewCode || String(p.viewCode) !== c.viewCode) throw new Error('看板連結無效或已關閉');
+        return { version: c.version, status: c.status };
+      }
+      case 'getBoardData': {
+        const c = findCase(p.caseId);
+        if (!c.viewCode || String(p.viewCode) !== c.viewCode) throw new Error('看板連結無效或已關閉');
+        const units = lst('units', c.id), members = lst('members', c.id);
+        const uname = id => { const u = units.find(x => x.id === id); return u ? u.name : ''; };
+        return {
+          case: { id: c.id, name: c.name, type: c.type, place: c.place, status: c.status, lat: c.lat, lng: c.lng, start: c.start, end: c.end, version: c.version },
+          zones: d.zones[c.id] || [],
+          units: units.map(u => ({ id: u.id, name: u.name, status: u.status, lat: u.lat, lng: u.lng, leader: u.leader, vehicles: u.vehicles })),
+          memberStats: { active: members.filter(m => m.status === '有效').length, pending: members.filter(m => m.status === '待確認').length },
+          tasks: lst('tasks', c.id).map(t => ({
+            id: t.id, title: t.title, status: t.status, zoneId: t.zoneId, hazard: t.hazard, tAssigned: t.tAssigned,
+            units: ids(t.assignUnits).map(uname).filter(Boolean)
+          })),
+          casualties: lst('casualties', c.id).map(x => ({   // 傷患不含描述、回報者、照片
+            id: x.id, mode: x.mode, triage: x.triage, red: x.red, yellow: x.yellow, green: x.green, black: x.black,
+            parentId: x.parentId, status: x.status, coord: x.coord
+          })),
+          reports: lst('reports', c.id).slice(-30).map(r => ({
+            id: r.id, time: r.time, unit: String(r.reporter || '').replace(/^.*（(.*)）$/, '$1'), content: r.content, coord: r.coord, taskId: r.taskId
+          })),
+          version: c.version
+        };
       }
 
       default:

@@ -211,6 +211,28 @@ U.fitGeometry = function (g, limit) {
   return null;
 };
 
+/* 分色圓餅圖（SVG 字串）。counts: { 紅, 黃, 綠, 黑 }，中央顯示總人數 */
+U.triagePie = function (counts, size) {
+  const total = CFG.TRIAGE.reduce((s, t) => s + (counts[t.id] || 0), 0);
+  if (!total) return '';
+  const r = size / 2 - 2, cx = size / 2, cy = size / 2;
+  const parts = CFG.TRIAGE.filter(t => counts[t.id] > 0);
+  let body = '';
+  if (parts.length === 1) body = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="' + parts[0].color + '"/>';
+  else {
+    let a0 = -Math.PI / 2;
+    parts.forEach(t => {
+      const a1 = a0 + 2 * Math.PI * counts[t.id] / total;
+      const x0 = cx + r * Math.cos(a0), y0 = cy + r * Math.sin(a0), x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
+      body += '<path d="M' + cx + ' ' + cy + ' L' + x0.toFixed(2) + ' ' + y0.toFixed(2) + ' A' + r + ' ' + r + ' 0 ' + ((a1 - a0) > Math.PI ? 1 : 0) + ' 1 ' + x1.toFixed(2) + ' ' + y1.toFixed(2) + ' Z" fill="' + t.color + '"/>';
+      a0 = a1;
+    });
+  }
+  return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">' + body +
+    '<circle cx="' + cx + '" cy="' + cy + '" r="' + (r * 0.5).toFixed(1) + '" fill="#fff"/>' +
+    '<text x="' + cx + '" y="' + (cy + size * 0.12) + '" text-anchor="middle" font-size="' + (size * 0.36).toFixed(0) + '" font-weight="700" fill="#222">' + total + '</text></svg>';
+};
+
 /* ---------- 介面輔助 ---------- */
 U.$ = (sel, root) => (root || document).querySelector(sel);
 U.$$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));

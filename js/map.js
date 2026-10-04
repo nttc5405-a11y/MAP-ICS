@@ -222,6 +222,7 @@ const MapView = {
     const wgs = U.fmtWgs(ll.lat, ll.lng), twd = U.fmtTwd(ll.lat, ll.lng);
     const html = '<div class="ctx"><div class="ctx-h">WGS84　' + wgs + '<br>TWD97　' + twd + '</div>' +
       '<button data-c="w">複製 WGS84</button><button data-c="t">複製 TWD97</button>' +
+      '<button data-c="v">以此為觀察點做視域分析</button>' +
       (this.readonly ? '' : '<button data-c="m">在此新增標記點</button>') + '</div>';
     const pop = L.popup({ closeButton: false, className: 'ctx-pop' }).setLatLng(ll).setContent(html).openOn(this.map);
     const el = pop.getElement();
@@ -229,6 +230,7 @@ const MapView = {
       const b = e.target.closest('[data-c]'); if (!b) return;
       if (b.dataset.c === 'w') U.copy(wgs);
       else if (b.dataset.c === 't') U.copy(twd);
+      else if (b.dataset.c === 'v') Viewshed.dialog({ lat: ll.lat, lng: ll.lng });
       else if (b.dataset.c === 'm') Zones.onDrawn({ geomType: 'Point', geometry: { type: 'Point', coordinates: [ll.lng, ll.lat] } });
       this.map.closePopup();
     });

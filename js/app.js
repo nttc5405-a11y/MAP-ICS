@@ -13,6 +13,7 @@ const App = {
     Tasks.bind();
     Casualties.bind();
     Mountain.bind();
+    Viewshed.bind();
     App.bindUi();
     App.updateModeBadge();
     Zones.renderList();
@@ -40,6 +41,7 @@ const App = {
     U.$('#btn-export').addEventListener('click', () => { if (App.needCase()) Kml.exportCase(App.state.cur, App.state.zones); });
     U.$('#btn-fit').addEventListener('click', () => MapView.fitAll());
     U.$('#btn-log').addEventListener('click', App.openLog);
+    U.$('#btn-board').addEventListener('click', App.boardDialog);
     U.$('#btn-goto').addEventListener('click', () => App.gotoFromInput(false));
     U.$('#btn-goto-save').addEventListener('click', () => { if (App.needCase(true)) App.gotoFromInput(true); });
     U.$('#goto-input').addEventListener('keydown', e => { if (e.key === 'Enter') App.gotoFromInput(false); });
@@ -225,6 +227,38 @@ const App = {
         [r.time, r.actor, r.action, r.target, r.content].map(x => '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"').join(','))).join('\r\n');
       U.download(U.safeFile(App.state.cur.id + '_時序表') + '.csv', '﻿' + csv, 'text/csv');   // BOM 讓 Excel 正確顯示中文
     }
+  },
+
+  /* ---------- 唯讀看板連結 ---------- */
+  boardUrl(c) {
+    const u = new URL('board.html', location.href);
+    u.searchParams.set('case', c.id); u.searchParams.set('view', c.viewCode);
+    return u.toString();
+  },
+  async boardDialog() {
+    if (!App.needCase()) return;
+    const render = el => {
+      const c = App.state.cur, on = !!c.viewCode, ro = App.state.readonly;
+      let svg = '';
+      if (on && typeof qrcode === 'function') { const qr = qrcode(0, 'M'); qr.addData(App.boardUrl(c)); qr.make(); svg = qr.createSvgTag(5, 4); }
+      U.$('#bd-body', el).innerHTML = on
+        ? '<div class="qr-wrap"><div class="qr-box">' + svg + '</div><div class="qr-info"><div class="hint" style="word-break:break-all">' + U.esc(App.boardUrl(c)) + '</div>' +
+          '<div class="btn-row"><button class="btn small" id="bd-copy">複製連結</button><button class="btn small" id="bd-open">開啟看板</button></div>' +
+          (ro ? '' : '<div class="btn-row"><button class="btn small" id="bd-regen">重新產生（舊連結失效）</button><button class="btn small danger" id="bd-off">關閉連結</button></div>') +
+          '<div class="hint">看板每 10 秒自動更新。按 F 鍵可縮放到全部內容。拿到連結的人都能看，請只給需要的人。</div></div></div>'
+        : '<p>尚未啟用唯讀看板連結。</p>' + (ro ? '<div class="hint">案件已結案，無法新增連結。</div>' : '<button class="btn primary" id="bd-on">啟用並產生連結</button>');
+      const q = id => U.$(id, el);
+      if (q('#bd-copy')) q('#bd-copy').onclick = () => U.copy(App.boardUrl(c));
+      if (q('#bd-open')) q('#bd-open').onclick = () => window.open(App.boardUrl(c), '_blank');
+      const set = async disable => {
+        const r = await Deploy.w('regenViewCode', { disable: disable });
+        if (r) { App.state.cur.viewCode = r.viewCode; render(el); U.toast(disable ? '已關閉看板連結' : '已產生看板連結', 'ok'); }
+      };
+      if (q('#bd-on')) q('#bd-on').onclick = () => set(false);
+      if (q('#bd-regen')) q('#bd-regen').onclick = async () => { if (await U.confirm('重新產生後，舊的看板連結會立刻失效。確定嗎？', '重新產生', true)) set(false); };
+      if (q('#bd-off')) q('#bd-off').onclick = async () => { if (await U.confirm('關閉後，所有人都看不到看板。確定嗎？', '關閉', true)) set(true); };
+    };
+    await U.modal({ title: '唯讀看板（投電視）', html: '<div id="bd-body"></div>', buttons: [{ text: '關閉', value: true }], onOpen: render });
   },
 
   /* ---------- 設定 ---------- */

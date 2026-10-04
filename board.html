@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>案件管制・唯讀看板</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="css/board.css">
+</head>
+<body>
+<header id="bhead">
+  <span id="b-type" class="tag"></span>
+  <h1 id="b-name">載入中…</h1>
+  <span id="b-place" class="sub"></span>
+  <span id="b-closed" class="closed" hidden>已結案</span>
+  <div class="spacer"></div>
+  <div class="clock"><div id="clock">--:--:--</div><div id="b-upd" class="sub"></div></div>
+</header>
+<div id="bmain">
+  <aside id="side">
+    <section class="stats" id="st-top"></section>
+    <section><h2>傷患</h2><div id="st-cas"></div></section>
+    <section class="grow"><h2>任務</h2><div id="st-tasks"></div></section>
+    <section><h2>最近回報</h2><div id="st-reps"></div></section>
+  </aside>
+  <div id="bmap"></div>
+</div>
+<div id="bmsg" class="bmsg" hidden></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="js/config.js"></script>
+<script src="js/util.js"></script>
+<script src="js/api.js"></script>
+<script src="js/board.js"></script>
+</body>
+</html>

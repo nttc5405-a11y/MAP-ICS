@@ -12,7 +12,7 @@ var GEOJSON_CELL_MAX = 50000;
 var CASE_FIELDS = [
   ['id', '案件編號'], ['name', '案件名稱'], ['type', '類型'], ['place', '地點'], ['lat', '緯度'], ['lng', '經度'],
   ['commander', '指揮官'], ['status', '狀態'], ['start', '開始時間'], ['end', '結束時間'], ['note', '備註'],
-  ['sheetId', '試算表ID'], ['folderId', '資料夾ID'], ['joinCode', '加入碼'], ['version', '版本'], ['updated', '最後更新']
+  ['sheetId', '試算表ID'], ['folderId', '資料夾ID'], ['joinCode', '加入碼'], ['version', '版本'], ['updated', '最後更新'], ['viewCode', '檢視碼']
 ];
 var ZONE_FIELDS = [
   ['id', '區域ID'], ['name', '名稱'], ['category', '類別'], ['color', '顏色'], ['geomType', '幾何類型'],
@@ -75,11 +75,12 @@ var WRITE_ACTIONS = {
   regenJoinCode: 1, joinCase: 1, joinAsTemp: 1, saveTask: 1, deleteTask: 1, updateTaskStatus: 1, submitReport: 1,
   fieldTaskStatus: 1, fieldReport: 1, fieldPhoto: 1,
   saveCasualty: 1, deleteCasualty: 1, splitCasualty: 1, updateTransport: 1, fieldCasualty: 1,
-  savePlan: 1, deletePlan: 1
+  savePlan: 1, deletePlan: 1, regenViewCode: 1
 };
 // 手機掃 QR 加入時還沒有個人權杖，改用「案件編號＋加入碼」驗證
 // 手機端的 field* 與 getMyStatus/getFieldData 不用管理權杖，改在函式內以個人權杖 memberToken 驗證
-var PUBLIC_ACTIONS = { getJoinInfo: 1, joinCase: 1, joinAsTemp: 1, getMyStatus: 1, getFieldData: 1, fieldTaskStatus: 1, fieldReport: 1, fieldPhoto: 1, fieldCasualty: 1 };
+var PUBLIC_ACTIONS = { getJoinInfo: 1, joinCase: 1, joinAsTemp: 1, getMyStatus: 1, getFieldData: 1, fieldTaskStatus: 1, fieldReport: 1, fieldPhoto: 1, fieldCasualty: 1,
+  getBoardVersion: 1, getBoardData: 1 };
 
 /* =====================================================================
  * 第一次使用：在編輯器選 setup 按「執行」。會建立工作表、根資料夾與管理權杖。
@@ -135,7 +136,8 @@ function doPost(e) {
     getMyStatus: getMyStatus_, getFieldData: getFieldData_, fieldTaskStatus: fieldTaskStatus_, fieldReport: fieldReport_,
     fieldPhoto: fieldPhoto_, getPhoto: getPhoto_,
     saveCasualty: saveCasualty_, deleteCasualty: deleteCasualty_, splitCasualty: splitCasualty_, updateTransport: updateTransport_,
-    fieldCasualty: fieldCasualty_, savePlan: savePlan_, deletePlan: deletePlan_
+    fieldCasualty: fieldCasualty_, savePlan: savePlan_, deletePlan: deletePlan_,
+    regenViewCode: regenViewCode_, getBoardVersion: getBoardVersion_, getBoardData: getBoardData_
   };
   var fn = handlers[req.action];
   if (!fn) return json_({ ok: false, error: '不認得的動作：' + req.action });
@@ -225,7 +227,7 @@ function appendRows_(sh, fields, objs) {
 }
 
 /* ---------- 案件索引 ---------- */
-function indexSheet_() { return master_().getSheetByName('案件索引'); }
+function indexSheet_() { return ensureSheet_(master_(), '案件索引', MASTER_SHEETS['案件索引']); }   // 順便補上新欄位（舊部署升級用）
 function findCase_(id) {
   var all = readAll_(indexSheet_(), CASE_FIELDS);
   for (var i = 0; i < all.length; i++) if (all[i].id === id) return all[i];
@@ -893,4 +895,58 @@ function deletePlan_(req) {
   sh.deleteRow(x._row);
   logEvent_(ss, req.actor, '刪除' + x.type, x.id, x.type + ' v' + x.version);
   return { version: bump_(c) };
+}
+
+
+/* =====================================================================
+ * 第 6 階段：唯讀看板（投電視用）。以案件的「檢視碼」驗證，只回傳不含個資的資料：
+ * 不含人員姓名／電話、登山計畫、傷患描述／回報者／照片。檢視碼可隨時重新產生或關閉。
+ * ===================================================================== */
+function regenViewCode_(req) {
+  var c = openCaseForWrite_(req.caseId), ss = caseSs_(c);
+  c.viewCode = req.disable ? '' : (Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '').slice(0, 6));
+  writeRow_(indexSheet_(), CASE_FIELDS, c._row, c);
+  logEvent_(ss, req.actor, req.disable ? '關閉唯讀看板連結' : '產生唯讀看板連結', c.id, '');
+  return { viewCode: c.viewCode, version: bump_(c) };
+}
+function boardAuth_(req) {
+  var c;
+  try { c = findCase_(req.caseId); } catch (e) { throw new Error('看板連結無效或已關閉'); }
+  if (!c.viewCode || !safeEqual_(String(req.viewCode || ''), c.viewCode)) throw new Error('看板連結無效或已關閉');
+  return c;
+}
+function getBoardVersion_(req) {
+  var c = boardAuth_(req);
+  var hit = CacheService.getScriptCache().get('v_' + c.id);
+  if (hit) return JSON.parse(hit);
+  putVerCache_(c);
+  return { version: Number(c.version) || 0, updated: c.updated, status: c.status };
+}
+function getBoardData_(req) {
+  var c = boardAuth_(req), ss = caseSs_(c);
+  var units = readAll_(sheet_(ss, '單位部署'), UNIT_FIELDS).map(stripRow_).map(unitOut_);
+  var members = readAll_(sheet_(ss, '案件人員'), MEMBER_FIELDS);
+  var uname = function (id) { var n = ''; units.forEach(function (u) { if (u.id === id) n = u.name; }); return n; };
+  var reports = readAll_(sheet_(ss, '回報'), REPORT_FIELDS).slice(-30);
+  return {
+    case: { id: c.id, name: c.name, type: c.type, place: c.place, status: c.status, lat: c.lat, lng: c.lng, start: c.start, end: c.end, version: Number(c.version) || 0 },
+    zones: readAll_(ss.getSheetByName('區域'), ZONE_FIELDS).map(stripRow_),
+    units: units.map(function (u) { return { id: u.id, name: u.name, status: u.status, lat: u.lat, lng: u.lng, leader: u.leader, vehicles: u.vehicles }; }),
+    memberStats: {
+      active: members.filter(function (m) { return m.status === '有效'; }).length,
+      pending: members.filter(function (m) { return m.status === '待確認'; }).length
+    },
+    tasks: readAll_(sheet_(ss, '任務'), TASK_FIELDS).map(function (t) {
+      return { id: t.id, title: t.title, status: t.status, zoneId: t.zoneId, hazard: t.hazard, tAssigned: t.tAssigned,
+        units: ids_(t.assignUnits).map(uname).filter(Boolean) };
+    }),
+    casualties: readAll_(sheet_(ss, '傷患'), CAS_FIELDS).map(casOut_).map(function (x) {
+      return { id: x.id, mode: x.mode, triage: x.triage, red: x.red, yellow: x.yellow, green: x.green, black: x.black,
+        parentId: x.parentId, status: x.status, coord: x.coord };
+    }),
+    reports: reports.map(function (r) {
+      return { id: r.id, time: r.time, unit: String(r.reporter || '').replace(/^.*（(.*)）$/, '$1'), content: r.content, coord: r.coord, taskId: r.taskId };
+    }),
+    version: Number(c.version) || 0
+  };
 }

@@ -80,6 +80,9 @@ const CFG = {
     { id: '執行中', color: '#ef6c00' },
     { id: '撤離', color: '#9e9e9e' }
   ],
+  // 視域分析用的地形圖磚（Terrain-RGB）。預設為 AWS Open Data 的 Terrarium 格式（公開、可跨網域讀取像素）
+  TERRAIN_URL: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
+  TERRAIN_FORMAT: 'terrarium',   // terrarium：高度 = R*256 + G + B/256 - 32768；mapbox：高度 = -10000 + (R*65536 + G*256 + B)*0.1
   // 山域模組
   SEARCH_STATUS: ['未搜', '搜索中', '已搜'],
   TRACK_CATS: ['計畫路線', '搜索軌跡', '參考軌跡'],
