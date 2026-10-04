@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>案件管制系統・指揮所版</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.20.2/dist/leaflet-geoman.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="topbar">
+  <button id="btn-sidebar" class="top-btn" title="收合／展開側欄">☰</button>
+  <div class="brand">案件管制系統<small>指揮所版</small></div>
+  <div id="case-ribbon" class="ribbon" hidden></div>
+  <div class="spacer"></div>
+  <span id="sync" class="sync"></span>
+  <span id="mode-badge" class="mode-badge"></span>
+  <button id="btn-settings" class="top-btn" title="設定">⚙ 設定</button>
+</header>
+
+<div id="main">
+  <aside id="sidebar">
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="cases">案件</button>
+      <button class="tab-btn" data-tab="zones">區域</button>
+      <button class="tab-btn" data-tab="deploy">部署<span id="badge-people" class="badge" hidden></span></button>
+      <button class="tab-btn" data-tab="tasks">任務<span id="badge-tasks" class="badge neutral" hidden></span></button>
+      <button class="tab-btn" data-tab="tools">工具</button>
+    </nav>
+
+    <section id="pane-cases" class="pane active">
+      <div id="case-current" class="case-current" hidden></div>
+      <div class="pane-bar">
+        <button id="btn-new-case" class="btn primary">＋ 新建案件</button>
+      </div>
+      <div class="pane-bar">
+        <select id="case-status">
+          <option value="進行中">進行中</option>
+          <option value="已結案">已結案</option>
+          <option value="">全部</option>
+        </select>
+        <input id="case-search" type="search" placeholder="搜尋編號、名稱、地點">
+      </div>
+      <div id="case-list" class="list"></div>
+    </section>
+
+    <section id="pane-zones" class="pane">
+      <div class="pane-bar"><select id="zone-filter"></select></div>
+      <div class="hint pad">用地圖左側工具列繪製；雙擊圖形可編輯屬性；點擊清單可定位。</div>
+      <div id="zone-list" class="list"></div>
+    </section>
+
+    <section id="pane-deploy" class="pane">
+      <div class="seg">
+        <button class="seg-btn active" data-sub="units">單位</button>
+        <button class="seg-btn" data-sub="people">人員</button>
+      </div>
+      <div id="sub-units">
+        <div class="pane-bar"><button id="btn-add-unit" class="btn primary">＋ 加入單位</button></div>
+        <div id="unit-list" class="list"></div>
+      </div>
+      <div id="sub-people" hidden>
+        <div class="pane-bar"><button id="btn-qr" class="btn">案件 QR Code</button><button id="btn-add-member" class="btn">＋ 代為加入</button></div>
+        <div class="pane-bar"><button id="btn-roster" class="btn small">名冊管理</button></div>
+        <div id="member-list" class="list"></div>
+      </div>
+    </section>
+
+    <section id="pane-tasks" class="pane">
+      <div class="pane-bar"><button id="btn-new-task" class="btn primary">＋ 派遣任務</button><button id="btn-new-report" class="btn">代登回報</button></div>
+      <div class="pane-bar">
+        <select id="task-filter"><option value="active">進行中的任務</option><option value="done">已完成</option><option value="all">全部</option></select>
+      </div>
+      <div id="task-list" class="list"></div>
+      <div class="sec-title">最近回報</div>
+      <div id="report-list" class="list"></div>
+    </section>
+
+    <section id="pane-tools" class="pane">
+      <div class="tool-block">
+        <h3>座標定位</h3>
+        <div class="hint">輸入 WGS84「緯度, 經度」或 TWD97「東, 北」</div>
+        <input id="goto-input" type="text" placeholder="例：22.75, 121.15　或　280000, 2517000">
+        <div class="btn-row"><button id="btn-goto" class="btn">定位</button><button id="btn-goto-save" class="btn">定位並存成標記點</button></div>
+      </div>
+      <div class="tool-block">
+        <h3>匯入／匯出</h3>
+        <div class="btn-row"><button id="btn-import" class="btn">匯入 KML／KMZ／GPX</button></div>
+        <div class="btn-row"><button id="btn-export" class="btn">匯出整案 KML</button></div>
+        <input id="file-import" type="file" accept=".kml,.kmz,.gpx" hidden>
+      </div>
+      <div class="tool-block">
+        <h3>地圖與紀錄</h3>
+        <div class="btn-row"><button id="btn-fit" class="btn">縮放至全部區域</button></div>
+        <div class="btn-row"><button id="btn-log" class="btn">事件日誌／匯出時序表</button></div>
+      </div>
+    </section>
+  </aside>
+
+  <main id="mapwrap">
+    <div id="map"></div>
+    <div id="statusbar">
+      <span>WGS84 <b id="cur-wgs">—</b></span>
+      <span>TWD97 <b id="cur-twd">—</b></span>
+      <span class="hint-r">右鍵點地圖可複製座標</span>
+    </div>
+  </main>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.20.2/dist/leaflet-geoman.min.js"></script>
+<script src="https://unpkg.com/@tmcw/togeojson@5.8.1/dist/togeojson.umd.js"></script>
+<script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/util.js"></script>
+<script src="js/api.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script src="js/kml.js"></script>
+<script src="js/map.js"></script>
+<script src="js/zones.js"></script>
+<script src="js/cases.js"></script>
+<script src="js/deploy.js"></script>
+<script src="js/tasks.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

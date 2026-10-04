@@ -1,0 +1,261 @@
+/* 主程式：狀態、同步、設定、工具分頁 */
+const App = {
+  state: { cases: [], cur: null, zones: [], units: [], members: [], tasks: [], reports: [], roster: null, version: 0, readonly: false },
+  busy: 0,
+  pollTimer: null,
+
+  /* ---------- 啟動 ---------- */
+  init() {
+    MapView.init('map');
+    Zones.bindList();
+    Cases.bindList();
+    Deploy.bind();
+    Tasks.bind();
+    App.bindUi();
+    App.updateModeBadge();
+    Zones.renderList();
+    Cases.renderCurrent();
+    App.switchTab('cases');
+    Cases.load().then(() => {
+      const last = U.store.get('ccs_last_case', '');
+      if (last && App.state.cases.some(c => c.id === last)) App.openCase(last);
+    });
+    App.pollTimer = setInterval(App.poll, CFG.POLL_MS);
+    window.addEventListener('resize', U.debounce(() => MapView.invalidate(), 200));
+  },
+
+  bindUi() {
+    U.$$('.tab-btn').forEach(b => b.addEventListener('click', () => App.switchTab(b.dataset.tab)));
+    U.$('#btn-settings').addEventListener('click', App.openSettings);
+    U.$('#btn-sidebar').addEventListener('click', () => {
+      document.body.classList.toggle('side-hidden'); setTimeout(() => MapView.invalidate(), 250);
+    });
+    // 工具分頁
+    U.$('#btn-import').addEventListener('click', () => {
+      if (!App.needCase(true)) return; U.$('#file-import').click();
+    });
+    U.$('#file-import').addEventListener('change', App.onImportFile);
+    U.$('#btn-export').addEventListener('click', () => { if (App.needCase()) Kml.exportCase(App.state.cur, App.state.zones); });
+    U.$('#btn-fit').addEventListener('click', () => MapView.fitAll());
+    U.$('#btn-log').addEventListener('click', App.openLog);
+    U.$('#btn-goto').addEventListener('click', () => App.gotoFromInput(false));
+    U.$('#btn-goto-save').addEventListener('click', () => { if (App.needCase(true)) App.gotoFromInput(true); });
+    U.$('#goto-input').addEventListener('keydown', e => { if (e.key === 'Enter') App.gotoFromInput(false); });
+  },
+
+  switchTab(name) {
+    U.$$('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+    U.$$('.pane').forEach(p => p.classList.toggle('active', p.id === 'pane-' + name));
+  },
+
+  /* 需要先進入案件；forWrite=true 時案件不能是結案狀態 */
+  needCase(forWrite) {
+    if (!App.state.cur) { U.toast('請先在「案件」分頁選一個案件', 'err'); return false; }
+    if (forWrite && App.state.readonly) { U.toast('案件已結案，請先重新開啟再修改', 'err'); return false; }
+    return true;
+  },
+
+  /* 包住所有後端呼叫：記錄忙碌狀態（輪詢會避開）、更新同步指示 */
+  async run(fn) {
+    App.busy++; App.setSync('同步中…', 'busy');
+    try { const r = await fn(); App.setSync('已同步 ' + U.now().slice(11), 'ok'); return r; }
+    catch (e) { App.setSync('同步失敗', 'err'); throw e; }
+    finally { App.busy--; }
+  },
+  setSync(text, cls) {
+    const el = U.$('#sync'); if (!el) return;
+    el.textContent = text; el.className = 'sync ' + (cls || '');
+  },
+  updateModeBadge() {
+    const el = U.$('#mode-badge');
+    el.textContent = Api.modeName();
+    el.className = 'mode-badge ' + (Api.isLocal() ? 'local' : 'gas');
+    el.title = Api.isLocal() ? '資料只存在這台電腦的瀏覽器，不會上傳。到「設定」填入 GAS 網址即可連線。' : '資料存於 Google 試算表與 Drive';
+  },
+
+  /* ---------- 案件進出 ---------- */
+  async openCase(id) {
+    try {
+      const r = await App.run(() => Api.call('getCase', { caseId: id }));
+      MapView.clearAll();
+      App.setData(r);
+      App.state.version = r.case.version;
+      App.applyCase(r.case);
+      MapView.showCase(r.case);
+      MapView.renderZones();
+      Zones.renderList();
+      Deploy.renderAll();
+      MapView.fitAll();
+      U.store.set('ccs_last_case', id);
+      Cases.renderList();
+      App.switchTab('zones');
+    } catch (e) { U.toast('開啟案件失敗：' + e.message, 'err'); }
+  },
+  /* 把 getCase 的回傳放進狀態 */
+  setData(r) {
+    App.state.cur = r.case;
+    App.state.zones = r.zones || [];
+    App.state.units = r.units || [];
+    App.state.members = r.members || [];
+    App.state.tasks = r.tasks || [];
+    App.state.reports = r.reports || [];
+  },
+  /* 案件資料有變（結案、改名…）時更新畫面 */
+  applyCase(c) {
+    App.state.cur = c;
+    App.state.version = Number(c.version) || App.state.version;
+    App.state.readonly = c.status === CFG.STATUS_CLOSED;
+    MapView.setReadonly(App.state.readonly);
+    MapView.showCase(c);
+    Zones.renderList();
+    Deploy.renderAll();
+    Cases.renderCurrent();
+    const rb = U.$('#case-ribbon');
+    rb.style.background = CFG.typeColor(c.type);
+    rb.innerHTML = '<b>' + U.esc(c.type) + '</b> ' + U.esc(c.id) + '　' + U.esc(c.name) +
+      (App.state.readonly ? '　<span class="ro">【已結案・唯讀】</span>' : '');
+    rb.hidden = false;
+    document.body.classList.toggle('readonly', App.state.readonly);
+  },
+  leaveCase() {
+    App.state.cur = null; App.state.zones = []; App.state.units = []; App.state.members = []; App.state.tasks = []; App.state.reports = [];
+    App.state.roster = null; App.state.readonly = false; App.state.version = 0;
+    MapView.clearAll(); MapView.setReadonly(false);
+    U.store.del('ccs_last_case');
+    U.$('#case-ribbon').hidden = true;
+    document.body.classList.remove('readonly');
+    Zones.renderList(); Deploy.renderAll(); Cases.renderCurrent(); Cases.renderList();
+    App.switchTab('cases');
+  },
+  async reloadCase(force) {
+    const c = App.state.cur; if (!c) return;
+    if (!force && (MapView.isEditing() || U.$('.modal-back'))) return;
+    try {
+      const r = await Api.call('getCase', { caseId: c.id });
+      App.setData(r);
+      App.applyCase(r.case);
+      MapView.renderZones();
+      Zones.renderList();
+      Deploy.renderAll();
+    } catch (e) { U.toast('重新讀取失敗：' + e.message, 'err'); }
+  },
+
+  /* ---------- 同步輪詢：先問版本號，有變才讀全案 ---------- */
+  async poll() {
+    const c = App.state.cur;
+    if (!c || App.busy > 0 || MapView.isEditing() || U.$('.modal-back') || document.hidden) return;
+    try {
+      const v = await Api.call('getVersion', { caseId: c.id });
+      App.setSync('已同步 ' + U.now().slice(11), 'ok');
+      if (Number(v.version) !== Number(App.state.version) || v.status !== c.status) {
+        await App.reloadCase(false);
+        U.toast('案件資料已由其他人更新', 'ok');
+      }
+    } catch (e) { App.setSync('同步失敗', 'err'); }
+  },
+
+  /* ---------- 工具：座標定位 ---------- */
+  gotoFromInput(save) {
+    const r = U.parseCoord(U.$('#goto-input').value);
+    if (!r) { U.toast('座標格式看不懂。範例：22.75, 121.15 或 TWD97：280000, 2517000', 'err'); return; }
+    MapView.gotoCoord(r.lat, r.lng, save);
+  },
+
+  /* ---------- 工具：匯入 ---------- */
+  async onImportFile(ev) {
+    const input = ev.target, file = input.files[0];
+    input.value = '';
+    if (!file) return;
+    let res;
+    try { res = await Kml.importFile(file); }
+    catch (e) { U.toast('匯入失敗：' + e.message, 'err'); return; }
+    if (!res.zones.length) {
+      await U.modal({ title: '匯入結果', html: '<p>這個檔案裡沒有可匯入的圖形。</p>' + (res.skipped.length ? '<p class="hint">略過：' + res.skipped.map(U.esc).join('、') + '</p>' : ''), buttons: [{ text: '關閉', value: true }] });
+      return;
+    }
+    const names = res.zones.slice(0, 12).map(z => '<li>' + U.esc(z.name) + '　<span class="hint">' + U.esc(CFG.GEOM_NAMES[z.geomType]) + (z.measure ? '・' + U.esc(z.measure) : '') + '</span></li>').join('');
+    const html = '<p>共 <b>' + res.zones.length + '</b> 個圖形，類別將設為「匯入資料」（匯入後可逐一改類別）。</p>' +
+      (res.simplified ? '<p class="hint">其中 ' + res.simplified + ' 個因節點過多已自動簡化。</p>' : '') +
+      '<ul class="plain">' + names + (res.zones.length > 12 ? '<li>…還有 ' + (res.zones.length - 12) + ' 個</li>' : '') + '</ul>' +
+      (res.skipped.length ? '<p class="warn">以下 ' + res.skipped.length + ' 項無法匯入：<br>' + res.skipped.slice(0, 8).map(U.esc).join('<br>') + '</p>' : '');
+    const ok = await U.modal({ title: '匯入 ' + file.name, html: html, buttons: [{ text: '取消', value: false }, { text: '全部匯入', cls: 'primary', value: true }] });
+    if (ok !== true) return;
+    try {
+      const r = await App.run(() => Api.call('saveZones', {
+        caseId: App.state.cur.id, zones: res.zones.map(Zones.clean), note: file.name
+      }));
+      App.state.version = r.version;
+      await App.reloadCase(true);
+      MapView.fitAll();
+      U.toast('已匯入 ' + r.count + ' 個圖形', 'ok');
+    } catch (e) { U.toast('匯入失敗：' + e.message, 'err'); }
+  },
+
+  /* ---------- 工具：事件日誌 ---------- */
+  async openLog() {
+    if (!App.needCase()) return;
+    let rows;
+    try { rows = await App.run(() => Api.call('getLog', { caseId: App.state.cur.id })); }
+    catch (e) { U.toast('讀取日誌失敗：' + e.message, 'err'); return; }
+    rows = rows.slice().sort((a, b) => (a.time < b.time ? -1 : 1));
+    const body = rows.length ? '<div class="log-wrap"><table class="log"><thead><tr><th>時間</th><th>操作者</th><th>動作</th><th>內容</th></tr></thead><tbody>' +
+      rows.map(r => '<tr><td>' + U.esc(r.time) + '</td><td>' + U.esc(r.actor) + '</td><td>' + U.esc(r.action) + '</td><td>' + U.esc(r.content) + '</td></tr>').join('') +
+      '</tbody></table></div>' : '<p class="empty">還沒有任何紀錄</p>';
+    const v = await U.modal({
+      title: '事件日誌（' + rows.length + ' 筆）', html: body, wide: true,
+      buttons: [{ text: '關閉', value: false }, { text: '匯出時序表 CSV', cls: 'primary', value: true }]
+    });
+    if (v === true) {
+      const csv = ['時間,操作者,動作,對象ID,內容'].concat(rows.map(r =>
+        [r.time, r.actor, r.action, r.target, r.content].map(x => '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"').join(','))).join('\r\n');
+      U.download(U.safeFile(App.state.cur.id + '_時序表') + '.csv', '﻿' + csv, 'text/csv');   // BOM 讓 Excel 正確顯示中文
+    }
+  },
+
+  /* ---------- 設定 ---------- */
+  async openSettings() {
+    const html = '<div class="form">' +
+      '<div class="hint">目前模式：<b>' + U.esc(Api.modeName()) + '</b>　版本 ' + CFG.VERSION + '</div>' +
+      '<label>操作者姓名（寫入事件日誌）<input id="st-actor" type="text" maxlength="20" value="' + U.esc(U.store.get(Api.KEY_ACTOR, '')) + '" placeholder="例：王小明"></label>' +
+      '<label>GAS 網址（留空＝本機試用模式）<input id="st-url" type="text" value="' + U.esc(Api.gasUrl()) + '" placeholder="https://script.google.com/macros/s/…/exec"></label>' +
+      '<label>管理權杖（API_TOKEN）<input id="st-token" type="password" value="' + U.esc(Api.token()) + '"></label>' +
+      '<div><button class="btn small" id="st-test" type="button">測試連線</button> <span id="st-result" class="hint"></span></div>' +
+      (Api.isLocal() ? '<hr><div><button class="btn small danger" id="st-clear" type="button">清空本機試用資料</button> <span class="hint">會刪除這台電腦上所有試用案件</span></div>' : '') +
+      '</div>';
+    const v = await U.modal({
+      title: '設定', html: html,
+      buttons: [{ text: '取消', value: false }, {
+        text: '儲存', cls: 'primary',
+        value: el => ({ actor: U.$('#st-actor', el).value.trim(), url: U.$('#st-url', el).value.trim(), token: U.$('#st-token', el).value.trim() })
+      }],
+      onOpen: el => {
+        U.$('#st-test', el).addEventListener('click', async () => {
+          const out = U.$('#st-result', el), url = U.$('#st-url', el).value.trim(), tk = U.$('#st-token', el).value.trim();
+          if (!url) { out.textContent = '本機試用模式不需要測試'; return; }
+          out.textContent = '測試中…';
+          const old = [Api.gasUrl(), Api.token()];
+          U.store.set(Api.KEY_URL, url); U.store.set(Api.KEY_TOKEN, tk);
+          try { const r = await Api.call('ping'); out.textContent = '✓ 連線成功（後端版本 ' + (r.version || '?') + '）'; out.style.color = '#2e7d32'; }
+          catch (e) { out.textContent = '✗ ' + e.message; out.style.color = '#c62828'; }
+          U.store.set(Api.KEY_URL, old[0]); U.store.set(Api.KEY_TOKEN, old[1]);   // 測試不改正式設定，按「儲存」才生效
+        });
+        const clr = U.$('#st-clear', el);
+        if (clr) clr.addEventListener('click', async () => {
+          if (await U.confirm('確定清空本機試用資料？\n所有試用案件與區域都會消失。', '清空', true)) {
+            Api.clearLocal(); U.toast('已清空', 'ok'); location.reload();
+          }
+        });
+      }
+    });
+    if (!v || typeof v !== 'object') return;
+    const changed = v.url !== Api.gasUrl() || v.token !== Api.token();
+    U.store.set(Api.KEY_ACTOR, v.actor);
+    U.store.set(Api.KEY_URL, v.url);
+    U.store.set(Api.KEY_TOKEN, v.token);
+    App.updateModeBadge();
+    if (changed) { App.leaveCase(); App.state.cases = []; await Cases.load(); U.toast('已切換為' + Api.modeName(), 'ok'); }
+    else U.toast('設定已儲存', 'ok');
+  }
+};
+
+document.addEventListener('DOMContentLoaded', App.init);
