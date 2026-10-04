@@ -22,12 +22,14 @@ const CFG = {
     { id: 'photo', name: '正射影像',
       url: 'https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/GoogleMapsCompatible/{z}/{y}/{x}',
       attr: '© 內政部國土測繪中心', maxZoom: 19, maxNativeZoom: 19 },
-    { id: 'rudy', name: '魯地圖',
-      url: 'https://rudy.tile.basecamp.tw/{z}/{x}/{y}.png',
-      attr: '© 魯地圖 Rudy / OpenStreetMap', maxZoom: 19, maxNativeZoom: 17 },
+    // 魯地圖（rudy.tile.basecamp.tw）的公開圖磚已無法連線，改用同樣有等高線與步道的 OpenTopoMap
+    { id: 'topo', name: '地形圖（等高線）',
+      url: 'https://a.tile.opentopomap.org/{z}/{x}/{y}.png',
+      attr: '© OpenTopoMap (CC-BY-SA) / OpenStreetMap', maxZoom: 19, maxNativeZoom: 17 },
+    // 清爽版的圖磚在縮放等級 11 以下位置會跑掉，所以小於 11 時自動改顯示電子地圖
     { id: 'rudy-lite', name: '魯地圖清爽版',
       url: 'https://tile.happyman.idv.tw/map/moi_osm/{z}/{x}/{y}.png',
-      attr: '© Happyman / OpenStreetMap', maxZoom: 19, maxNativeZoom: 16 },
+      attr: '© Happyman / OpenStreetMap', maxZoom: 19, maxNativeZoom: 16, minZoom: 11, fallback: 'emap' },
     { id: 'osm', name: 'OpenStreetMap',
       url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
       attr: '© OpenStreetMap contributors', maxZoom: 19, maxNativeZoom: 19 }
@@ -36,6 +38,9 @@ const CFG = {
 
   // 疊加圖層
   OVERLAYS: [
+    { id: 'trails', name: '登山步道（Waymarked Trails）',
+      url: 'https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png',
+      attr: '© waymarkedtrails.org / OpenStreetMap', maxZoom: 19, maxNativeZoom: 18, opacity: 0.85 },
     { id: 'happyman-track', name: 'Happyman 航跡',
       url: 'https://tile.happyman.idv.tw/map/moi_osm_gpx/{z}/{x}/{y}.png',
       attr: '© Happyman', maxZoom: 19, maxNativeZoom: 16, opacity: 0.9 }

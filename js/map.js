@@ -16,7 +16,13 @@ const MapView = {
 
     // 底圖與疊加圖層
     const base = {}, over = {};
-    const mk = d => L.tileLayer(d.url, { attribution: d.attr, maxZoom: d.maxZoom, maxNativeZoom: d.maxNativeZoom, opacity: d.opacity || 1 });
+    const mk = d => {
+      const t = L.tileLayer(d.url, { attribution: d.attr, maxZoom: d.maxZoom, maxNativeZoom: d.maxNativeZoom, opacity: d.opacity || 1, minZoom: d.minZoom || 0 });
+      if (!d.fallback) return t;
+      // 這個底圖在 minZoom 以下不可用：縮小時改顯示備用底圖
+      const f = CFG.BASEMAPS.find(x => x.id === d.fallback);
+      return L.layerGroup([L.tileLayer(f.url, { attribution: f.attr, maxZoom: d.minZoom - 1, maxNativeZoom: f.maxNativeZoom }), t]);
+    };
     CFG.BASEMAPS.forEach(d => { base[d.name] = mk(d); });
     CFG.OVERLAYS.forEach(d => { over[d.name] = mk(d); });
     const savedBase = U.store.get('ccs_basemap', '');
