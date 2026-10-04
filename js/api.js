@@ -8,7 +8,8 @@ const Api = {
   KEY_ACTOR: 'ccs_actor',
   KEY_DB: 'ccs_local_db',
 
-  gasUrl() { return (U.store.get(Api.KEY_URL, '') || '').trim(); },
+  // 優先用「設定」裡自己填的網址，沒有就用 config.js 內建的 GAS_URL
+  gasUrl() { return (U.store.get(Api.KEY_URL, '') || '').trim() || (CFG.GAS_URL || '').trim(); },
   token() { return (U.store.get(Api.KEY_TOKEN, '') || '').trim(); },
   actor() { return (U.store.get(Api.KEY_ACTOR, '') || '').trim() || '指揮所'; },
   isLocal() { return !Api.gasUrl(); },
