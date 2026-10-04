@@ -88,6 +88,7 @@ const App = {
       MapView.renderZones();
       Zones.renderList();
       Deploy.renderAll();
+      Deploy.ensureRoster().then(() => Deploy.renderAll());   // 載入名冊後，臨時人員的「已在名冊」才會正確顯示
       MapView.fitAll();
       U.store.set('ccs_last_case', id);
       Cases.renderList();

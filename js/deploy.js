@@ -188,6 +188,7 @@ const Deploy = {
         (m.identity === '臨時' ? '<span class="tag tmp">臨時</span>' : '') + '</div>' +
         '<div class="ui-sub">' + info(m) + '</div>' + sub(m) +
         '<div class="ui-btns"><label class="inl">編組 <select data-f="group"' + (ro ? ' disabled' : '') + '>' + opts + '</select></label>' +
+        (m.identity === '臨時' ? (Deploy.inRoster(m) ? '<span class="hint">✓ 已在名冊</span>' : '<button class="btn small" data-act="toroster">加入名冊</button>') : '') +
         (ro ? '' : '<button class="btn small danger" data-act="revoke">撤銷</button>') + '</div></div>';
     }).join('') : '<div class="empty">還沒有人員加入。<br>可用「案件 QR Code」讓現場人員掃描，或按「＋ 代為加入」。</div>';
     if (revoked.length) {
@@ -201,6 +202,37 @@ const Deploy = {
     if (!it || !btn) return;
     const id = it.dataset.id, a = btn.dataset.act;
     if (a === 'approve') Deploy.approve(id); else if (a === 'reject') Deploy.reject(id); else if (a === 'revoke') Deploy.revoke(id);
+    else if (a === 'toroster') Deploy.toRoster(id);
+  },
+  /* 這位臨時人員是否已在總表名冊（名冊尚未載入時視為不在） */
+  inRoster(m) {
+    const r = App.state.roster;
+    return !!(r && r.people.some(p => p.name === m.name && p.unit === (m.unit || '')));
+  },
+  /* 臨時人員一鍵加入總表名冊（之後掃 QR 可直接從名冊選自己；結案後也能做，因為名冊是跨案件共用的） */
+  async toRoster(id) {
+    const m = Deploy.memberById(id); if (!m) return;
+    try {
+      const roster = await Deploy.ensureRoster(true);   // 先讀最新名冊，避免蓋掉別人剛改的
+      let unit = m.unit || '';
+      if (!unit) {
+        const v = await U.modal({
+          title: '加入名冊：請指定單位', html: '<div class="form"><div><b>' + U.esc(m.name) + '</b> 沒有填單位。</div>' +
+            '<label>單位<input id="tr-unit" type="text" list="tr-ul" maxlength="30" placeholder="選擇或輸入單位名稱"><datalist id="tr-ul">' +
+            roster.units.map(u => '<option value="' + U.esc(u.name) + '">').join('') + '</datalist></label></div>',
+          buttons: [{ text: '取消', value: false }, { text: '加入名冊', cls: 'primary', validate: el => { if (!U.$('#tr-unit', el).value.trim()) { U.toast('請填單位', 'err'); return false; } }, value: el => U.$('#tr-unit', el).value.trim() }]
+        });
+        if (!v || typeof v !== 'string') return;
+        unit = v;
+      }
+      if (roster.people.some(p => p.name === m.name && p.unit === unit)) { U.toast(m.name + '（' + unit + '）已經在名冊中'); Deploy.renderAll(); return; }
+      const units = roster.units.slice();
+      if (!units.some(u => u.name === unit)) units.push({ id: U.uid('U'), name: unit, category: '外部支援', vehicles: '', order: units.length + 1 });
+      const people = roster.people.concat([{ id: U.uid('P'), unit: unit, name: m.name, title: '', order: roster.people.length + 1, active: '是' }]);
+      App.state.roster = await App.run(() => Api.call('saveRoster', { units: units, people: people }));
+      U.toast('已將 ' + m.name + '（' + unit + '）加入名冊', 'ok');
+      Deploy.renderAll();
+    } catch (e) { U.toast('加入名冊失敗：' + e.message, 'err'); }
   },
   onMemberChange(e) {
     const it = e.target.closest('.member-item'); if (!it || e.target.dataset.f !== 'group') return;
