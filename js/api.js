@@ -518,7 +518,8 @@ const Api = {
           memberStats: { active: members.filter(m => m.status === '有效').length, pending: members.filter(m => m.status === '待確認').length },
           tasks: lst('tasks', c.id).map(t => ({
             id: t.id, title: t.title, status: t.status, zoneId: t.zoneId, hazard: t.hazard, tAssigned: t.tAssigned,
-            units: ids(t.assignUnits).map(uname).filter(Boolean)
+            units: ids(t.assignUnits).map(uname).filter(Boolean),
+            crew: members.filter(m => m.status === '有效' && (ids(t.assignUnits).map(uname).indexOf(m.group || m.unit) >= 0 || ids(t.assignPeople).indexOf(m.id) >= 0)).map(m => m.name)   // 只給姓名，不含電話
           })),
           casualties: lst('casualties', c.id).map(x => ({   // 傷患不含描述、回報者、照片
             id: x.id, mode: x.mode, triage: x.triage, red: x.red, yellow: x.yellow, green: x.green, black: x.black,

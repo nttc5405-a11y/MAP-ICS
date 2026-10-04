@@ -44,6 +44,13 @@ body { font-family: 'Noto Sans TC', 'Microsoft JhengHei', system-ui, sans-serif;
 .cas-pie { background: rgba(255,255,255,.92); border-radius: 50%; width: 54px; height: 54px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 1px 3px rgba(0,0,0,.6)); }
 .rp-dot { width: 16px; height: 16px; border-radius: 50%; background: #e65100; border: 2px solid #fff; }
 
+.task-label-wrap { background: none; border: 0; }
+.task-label { position: absolute; transform: translate(-50%, -50%); background: rgba(255,255,255,.94); color: #111; border-radius: 8px; padding: 3px 5px; box-shadow: 0 1px 6px rgba(0,0,0,.5); white-space: nowrap; font-size: 17px; font-weight: 700; pointer-events: none; }
+.task-label .tl-row { border-left: 6px solid #999; padding: 1px 8px; }
+.task-label .tl-row small { margin-left: 8px; font-weight: 400; color: #555; font-size: 14px; }
+.tip-hr { border: 0; border-top: 1px solid #ccc; margin: 5px 0; }
+.leaflet-tooltip { white-space: normal; width: max-content; min-width: 170px; max-width: 340px; font-size: 16px; }
+
 @media (max-width: 900px) {
   body { font-size: 16px; overflow: auto; }
   #bmain { flex-direction: column-reverse; }

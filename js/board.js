@@ -62,7 +62,7 @@ const B = {
     const tg = document.getElementById('b-type'); tg.textContent = c.type; tg.style.background = CFG.typeColor(c.type);
     document.getElementById('b-place').textContent = c.place ? '📍 ' + c.place : '';
     document.getElementById('b-closed').hidden = c.status !== '已結案';
-    B.renderStats(); B.renderMap();
+    B.renderStats(); B.renderMap(); B.renderLabels();
     if (!B.fitted) { B.fit(); B.fitted = true; }
   },
   renderStats() {
@@ -98,11 +98,12 @@ const B = {
     B.map = L.map('bmap', { zoomControl: true, attributionControl: true }).setView(CFG.DEFAULT_CENTER, 12);
     L.tileLayer(b.url, { attribution: b.attr, maxZoom: b.maxZoom, maxNativeZoom: b.maxNativeZoom }).addTo(B.map);
     B.zoneG = L.featureGroup().addTo(B.map); B.unitG = L.featureGroup().addTo(B.map);
-    B.casG = L.featureGroup().addTo(B.map); B.repG = L.featureGroup().addTo(B.map);
+    B.casG = L.featureGroup().addTo(B.map); B.repG = L.featureGroup().addTo(B.map); B.labelG = L.layerGroup().addTo(B.map);
   },
   renderMap() {
     const d = B.data;
-    [B.zoneG, B.unitG, B.casG, B.repG].forEach(g => g.clearLayers());
+    [B.zoneG, B.unitG, B.casG, B.repG, B.labelG].forEach(g => g.clearLayers());
+    B.zl = {};
     d.zones.forEach(z => {
       let g; try { g = JSON.parse(z.geojson); } catch (e) { return; }
       const col = z.color || CFG.catColor(z.category);
@@ -113,7 +114,7 @@ const B = {
       else if (z.geomType === 'Circle') l = L.circle([g.coordinates[1], g.coordinates[0]], Object.assign({ radius: Number(z.radius) || 1 }, st));
       else if (z.geomType === 'LineString') l = L.polyline(g.coordinates.map(c => [c[1], c[0]]), Object.assign({}, st, { fill: false }));
       else if (z.geomType === 'Polygon') l = L.polygon(g.coordinates.map(r => r.map(c => [c[1], c[0]])), st);
-      if (l) { l.bindTooltip(U.esc(z.name || z.category) + (z.hazard ? '<br>⚠ ' + U.esc(z.hazard) : ''), { sticky: true }); B.zoneG.addLayer(l); }
+      if (l) { l.bindTooltip(() => B.zoneTip(z), { sticky: true }); B.zoneG.addLayer(l); B.zl[z.id] = l; }
     });
     d.units.forEach(u => {
       const lat = parseFloat(u.lat), lng = parseFloat(u.lng);
@@ -136,6 +137,28 @@ const B = {
     d.reports.forEach(r => {
       const p = B.ll(r.coord); if (!p) return;
       B.repG.addLayer(L.marker([p.lat, p.lng], { icon: L.divIcon({ className: 'rp-wrap', html: '<div class="rp-dot"></div>', iconSize: [16, 16], iconAnchor: [8, 8] }) }).bindTooltip(U.esc(r.content)));
+    });
+  },
+  /* 區域的游標提示：區域資訊 + 該區未完成任務、單位與人員姓名 */
+  openTasks(zid) { return B.data.tasks.filter(t => t.zoneId === zid && t.status !== '完成'); },
+  zoneTip(z) {
+    let h = '<b>' + U.esc(z.name || z.category) + '</b><br>' + U.esc(z.category) + (z.measure ? '<br>' + U.esc(z.measure) : '') + (z.hazard ? '<br>⚠ ' + U.esc(z.hazard) : '');
+    B.openTasks(z.id).forEach(t => {
+      h += '<hr class="tip-hr"><span style="color:' + CFG.taskColor(t.status) + ';font-weight:700">● ' + U.esc(t.title) + '</span>（' + U.esc(t.status) + '）' +
+        (t.units.length ? '<br>單位：' + U.esc(t.units.join('、')) : '') +
+        (t.crew && t.crew.length ? '<br>人員（' + t.crew.length + '）：' + U.esc(t.crew.slice(0, 16).join('、')) + (t.crew.length > 16 ? '…' : '') : '') +
+        (t.hazard ? '<br>⚠ ' + U.esc(t.hazard) : '');
+    });
+    return h;
+  },
+  /* 有未完成任務的區域，在中央標出任務標題 */
+  renderLabels() {
+    B.labelG.clearLayers();
+    Object.keys(B.zl).forEach(zid => {
+      const ts = B.openTasks(zid); if (!ts.length) return;
+      const l = B.zl[zid], ll = l.getBounds ? l.getBounds().getCenter() : l.getLatLng();
+      const html = ts.map(t => '<div class="tl-row" style="border-left-color:' + CFG.taskColor(t.status) + '">' + U.esc(t.title) + '<small>' + U.esc(t.status) + '</small></div>').join('');
+      B.labelG.addLayer(L.marker(ll, { interactive: false, zIndexOffset: 700, icon: L.divIcon({ className: 'task-label-wrap', html: '<div class="task-label">' + html + '</div>', iconSize: [0, 0] }) }));
     });
   },
   fit() {

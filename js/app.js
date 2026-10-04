@@ -6,6 +6,7 @@ const App = {
 
   /* ---------- 啟動 ---------- */
   init() {
+    App.loginFromHash();
     MapView.init('map');
     Zones.bindList();
     Cases.bindList();
@@ -229,6 +230,21 @@ const App = {
     }
   },
 
+  /* 指揮所登入連結：網址後面帶 #token=權杖，開啟時存進這個瀏覽器並立刻從網址列移除。
+     井號後面的內容不會送到伺服器；把連結加入書籤，換裝置或換網址也不用再手動輸入。 */
+  loginFromHash() {
+    const m = /[#&]token=([^&]+)/.exec(location.hash || '');
+    if (!m) return;
+    try {
+      U.store.set(Api.KEY_TOKEN, decodeURIComponent(m[1]));
+      history.replaceState(null, '', location.pathname + location.search);
+      setTimeout(() => U.toast('已記住管理權杖，這個瀏覽器之後不用再輸入', 'ok'), 800);
+    } catch (e) { /* 網址格式不對就忽略 */ }
+  },
+  loginLink() {
+    return new URL(location.pathname, location.origin).toString() + '#token=' + encodeURIComponent(Api.token());
+  },
+
   /* ---------- 唯讀看板連結 ---------- */
   boardUrl(c) {
     const u = new URL('board.html', CFG.PUBLIC_URL || location.href);
@@ -269,6 +285,7 @@ const App = {
       '<label>GAS 網址（留空＝本機試用模式）<input id="st-url" type="text" value="' + U.esc(Api.gasUrl()) + '" placeholder="https://script.google.com/macros/s/…/exec"></label>' +
       '<label>管理權杖（API_TOKEN）<input id="st-token" type="password" value="' + U.esc(Api.token()) + '"></label>' +
       '<div><button class="btn small" id="st-test" type="button">測試連線</button> <span id="st-result" class="hint"></span></div>' +
+      '<div><button class="btn small" id="st-link" type="button">複製「指揮所登入連結」</button> <span class="hint">加入書籤後，開啟就自動登入（連結內含權杖，請勿分享給別人）</span></div>' +
       (Api.isLocal() ? '<hr><div><button class="btn small danger" id="st-clear" type="button">清空本機試用資料</button> <span class="hint">會刪除這台電腦上所有試用案件</span></div>' : '') +
       '</div>';
     const v = await U.modal({
@@ -287,6 +304,13 @@ const App = {
           try { const r = await Api.call('ping'); out.textContent = '✓ 連線成功（後端版本 ' + (r.version || '?') + '）'; out.style.color = '#2e7d32'; }
           catch (e) { out.textContent = '✗ ' + e.message; out.style.color = '#c62828'; }
           U.store.set(Api.KEY_URL, old[0]); U.store.set(Api.KEY_TOKEN, old[1]);   // 測試不改正式設定，按「儲存」才生效
+        });
+        U.$('#st-link', el).addEventListener('click', () => {
+          const tk = U.$('#st-token', el).value.trim();
+          if (!tk) { U.toast('請先填入管理權杖', 'err'); return; }
+          const old = U.store.get(Api.KEY_TOKEN, ''); U.store.set(Api.KEY_TOKEN, tk);
+          const link = App.loginLink(); U.store.set(Api.KEY_TOKEN, old);
+          U.copy(link);
         });
         const clr = U.$('#st-clear', el);
         if (clr) clr.addEventListener('click', async () => {

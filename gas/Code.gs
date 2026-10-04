@@ -907,7 +907,7 @@ function deletePlan_(req) {
 
 /* =====================================================================
  * 第 6 階段：唯讀看板（投電視用）。以案件的「檢視碼」驗證，只回傳不含個資的資料：
- * 不含人員姓名／電話、登山計畫、傷患描述／回報者／照片。檢視碼可隨時重新產生或關閉。
+ * 任務會附上編組人員姓名（不含電話）；不含登山計畫、傷患描述／回報者／照片。檢視碼可隨時重新產生或關閉。
  * ===================================================================== */
 function regenViewCode_(req) {
   var c = openCaseForWrite_(req.caseId), ss = caseSs_(c);
@@ -944,8 +944,12 @@ function getBoardData_(req) {
       pending: members.filter(function (m) { return m.status === '待確認'; }).length
     },
     tasks: readAll_(sheet_(ss, '任務'), TASK_FIELDS).map(function (t) {
+      var unitNames = ids_(t.assignUnits).map(uname).filter(Boolean);
       return { id: t.id, title: t.title, status: t.status, zoneId: t.zoneId, hazard: t.hazard, tAssigned: t.tAssigned,
-        units: ids_(t.assignUnits).map(uname).filter(Boolean) };
+        units: unitNames,
+        crew: members.filter(function (m) {   // 只給姓名，不含電話
+          return m.status === '有效' && (unitNames.indexOf(m.group || m.unit) >= 0 || ids_(t.assignPeople).indexOf(m.id) >= 0);
+        }).map(function (m) { return m.name; }) };
     }),
     casualties: readAll_(sheet_(ss, '傷患'), CAS_FIELDS).map(casOut_).map(function (x) {
       return { id: x.id, mode: x.mode, triage: x.triage, red: x.red, yellow: x.yellow, green: x.green, black: x.black,
