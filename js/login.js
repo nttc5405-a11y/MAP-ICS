@@ -14,6 +14,10 @@ const Login = {
     U.$('#lg-board').addEventListener('click', Login.board);
     U.$('#lg-closed').addEventListener('change', Login.fillCases);
     U.$('#lg-settings').addEventListener('click', () => App.openSettings());
+    U.$('#lg-forget').addEventListener('click', async () => {
+      if (!await U.confirm('清除後，這個瀏覽器就不再有管理員權限（不能建案，也不能免驗證碼進入案件）。\n之後要再用，需重新輸入管理員密碼。', '清除', true)) return;
+      U.store.del(Api.KEY_TOKEN); U.toast('已清除此瀏覽器的管理員密碼', 'ok'); Login.show();
+    });
     ['lg-pass', 'lg-bpass'].forEach(id => U.$('#' + id).addEventListener('keydown', e => {
       if (e.key === 'Enter') (id === 'lg-pass' ? Login.enter : Login.board)();
     }));
@@ -25,8 +29,14 @@ const Login = {
     U.$('#lg-name').value = U.store.get(Api.KEY_ACTOR, '');
     U.$('#lg-mode').textContent = Api.modeName();
     U.$('#lg-mode').className = 'mode-badge ' + (Api.isLocal() ? 'local' : 'gas');
-    U.$('#lg-admin-hint').hidden = !(Api.token() && !Api.isLocal());
-    U.$('#lg-adminpw').value = Api.token();
+    const isAdmin = !!(Api.token() && !Api.isLocal());
+    U.$('#lg-admin-hint').hidden = !isAdmin;
+    // 管理員密碼欄不預先填入（避免被旁人看到或複製）；此瀏覽器已存密碼時可留空
+    U.$('#lg-adminpw').value = '';
+    U.$('#lg-adminpw').placeholder = isAdmin ? '管理員密碼（此瀏覽器已儲存，可留空）' : '管理員密碼（管理權杖）';
+    // 「連線設定」只給管理員／練習模式／網址帶 ?settings=1 的人看；一般同仁用不到
+    U.$('#lg-settings').hidden = !(isAdmin || Api.isLocal() || /[?&]settings=1/.test(location.search));
+    U.$('#lg-forget').hidden = !isAdmin;
     const m = U.$('#lg-msg'); m.hidden = !msg; m.textContent = msg || '';
     ['lg-pass', 'lg-newname', 'lg-newplace', 'lg-newpass', 'lg-bpass'].forEach(id => { U.$('#' + id).value = ''; });   // 登出後不殘留上一次輸入
     App.loadMarquee();
@@ -85,7 +95,7 @@ const Login = {
     if (!f.name) { U.toast('請填寫案件名稱', 'err'); return; }
     if (f.passcode.length < 4) { U.toast('請設定案件驗證碼（至少 4 個字元），並告知要進入的人', 'err'); return; }
     const adminpw = U.$('#lg-adminpw').value.trim();
-    if (!Api.isLocal() && !adminpw) { U.toast('建立案件需要管理員密碼（管理權杖）', 'err'); return; }
+    if (!Api.isLocal() && !adminpw && !Api.token()) { U.toast('建立案件需要管理員密碼（管理權杖）', 'err'); return; }
     await Login.busy(U.$('#lg-create'), async () => {
       try {
         const c = await Api.call('createCase', { fields: f, _token: adminpw });

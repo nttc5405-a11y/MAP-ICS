@@ -293,23 +293,26 @@ const App = {
 
   /* ---------- 設定 ---------- */
   async openSettings() {
+    // 連線網址與管理權杖只給管理員（此瀏覽器已存權杖）、練習模式、或網址帶 ?settings=1 的人看；一般同仁只看得到姓名
+    const admin = !!Api.token() || Api.isLocal() || /[?&]settings=1/.test(location.search);
     const html = '<div class="form">' +
       '<div class="hint">目前模式：<b>' + U.esc(Api.modeName()) + '</b>　版本 ' + CFG.VERSION + '</div>' +
       '<label>操作者姓名（寫入事件日誌）<input id="st-actor" type="text" maxlength="20" value="' + U.esc(U.store.get(Api.KEY_ACTOR, '')) + '" placeholder="例：王小明"></label>' +
-      '<label>GAS 網址（留空＝本機試用模式）<input id="st-url" type="text" value="' + U.esc(Api.gasUrl()) + '" placeholder="https://script.google.com/macros/s/…/exec"></label>' +
-      '<label>管理權杖（API_TOKEN）<input id="st-token" type="password" value="' + U.esc(Api.token()) + '"></label>' +
+      (admin ? '<label>GAS 網址（留空＝本機試用模式）<input id="st-url" type="text" value="' + U.esc(Api.gasUrl()) + '" placeholder="https://script.google.com/macros/s/…/exec"></label>' +
+      '<label>管理權杖（API_TOKEN）<input id="st-token" type="password" autocomplete="off" value="' + U.esc(Api.token()) + '"></label>' +
       '<div><button class="btn small" id="st-test" type="button">測試連線</button> <span id="st-result" class="hint"></span></div>' +
-      '<div><button class="btn small" id="st-link" type="button">複製「指揮所登入連結」</button> <span class="hint">加入書籤後，開啟就自動登入（連結內含權杖，請勿分享給別人）</span></div>' +
+      '<div><button class="btn small" id="st-link" type="button">複製「指揮所登入連結」</button> <span class="hint">加入書籤後，開啟就自動登入（連結內含權杖，請勿分享給別人）</span></div>' : '') +
       (Api.isLocal() ? '<hr><div><button class="btn small danger" id="st-clear" type="button">清空本機試用資料</button> <span class="hint">會刪除這台電腦上所有試用案件</span></div>' : '') +
       '</div>';
     const v = await U.modal({
       title: '設定', html: html,
       buttons: [{ text: '取消', value: false }, {
         text: '儲存', cls: 'primary',
-        value: el => ({ actor: U.$('#st-actor', el).value.trim(), url: U.$('#st-url', el).value.trim(), token: U.$('#st-token', el).value.trim() })
+        value: el => ({ actor: U.$('#st-actor', el).value.trim(), url: U.$('#st-url', el) ? U.$('#st-url', el).value.trim() : null, token: U.$('#st-token', el) ? U.$('#st-token', el).value.trim() : null })
       }],
       onOpen: el => {
-        U.$('#st-test', el).addEventListener('click', async () => {
+        const stTest = U.$('#st-test', el);
+        if (stTest) stTest.addEventListener('click', async () => {
           const out = U.$('#st-result', el), url = U.$('#st-url', el).value.trim(), tk = U.$('#st-token', el).value.trim();
           if (!url) { out.textContent = '本機試用模式不需要測試'; return; }
           out.textContent = '測試中…';
@@ -319,7 +322,8 @@ const App = {
           catch (e) { out.textContent = '✗ ' + e.message; out.style.color = '#c62828'; }
           U.store.set(Api.KEY_URL, old[0]); U.store.set(Api.KEY_TOKEN, old[1]);   // 測試不改正式設定，按「儲存」才生效
         });
-        U.$('#st-link', el).addEventListener('click', () => {
+        const stLink = U.$('#st-link', el);
+        if (stLink) stLink.addEventListener('click', () => {
           const tk = U.$('#st-token', el).value.trim();
           if (!tk) { U.toast('請先填入管理權杖', 'err'); return; }
           const old = U.store.get(Api.KEY_TOKEN, ''); U.store.set(Api.KEY_TOKEN, tk);
@@ -335,10 +339,9 @@ const App = {
       }
     });
     if (!v || typeof v !== 'object') return;
-    const changed = v.url !== Api.gasUrl() || v.token !== Api.token();
+    const changed = v.url !== null && (v.url !== Api.gasUrl() || v.token !== Api.token());
     U.store.set(Api.KEY_ACTOR, v.actor);
-    U.store.set(Api.KEY_URL, v.url);
-    U.store.set(Api.KEY_TOKEN, v.token);
+    if (v.url !== null) { U.store.set(Api.KEY_URL, v.url); U.store.set(Api.KEY_TOKEN, v.token); }
     App.updateModeBadge();
     if (changed) { App.leaveCase(); U.toast('已切換為' + Api.modeName(), 'ok'); }
     else U.toast('設定已儲存', 'ok');
