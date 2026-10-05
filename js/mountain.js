@@ -66,7 +66,7 @@ const Mountain = {
       const opts = CFG.SEARCH_STATUS.map(s => '<option' + (s === st ? ' selected' : '') + '>' + s + '</option>').join('');
       const cv = Mountain.cov[z.id];
       return '<div class="seg-item" data-id="' + U.esc(z.id) + '" style="border-left-color:' + cols[st] + '">' +
-        '<div class="ui-top"><b>' + (z.priority ? '<span class="pri">' + U.esc(z.priority) + '</span>' : '') + U.esc(z.name || z.id) + '</b>' +
+        '<div class="ui-top"><b>' + (z.priority ? '<span class="pri">' + U.esc(z.priority) + '</span>' : '') + U.esc(Zones.pathName(z)) + '</b>' +
         '<select data-f="status"' + (ro ? ' disabled' : '') + '>' + opts + '</select></div>' +
         '<div class="ui-sub">' + U.esc(z.measure || '') + '</div>' +
         (z.terrain ? '<div class="ui-sub">地形：' + U.esc(z.terrain) + '</div>' : '') +

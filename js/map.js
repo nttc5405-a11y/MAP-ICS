@@ -152,7 +152,7 @@ const MapView = {
     const wasModes = Object.assign({}, this.modes);
     this.zoneGroup.clearLayers();
     this.layers = {};
-    Zones.list().forEach(z => {
+    Zones.ordered(Zones.list()).map(o => o.z).forEach(z => {
       const layer = this.layerFor(z);
       if (!layer) return;
       layer.zoneId = z.id;
@@ -254,7 +254,8 @@ const MapView = {
   openTasksOf(zoneId) { return App.state.tasks.filter(t => t.zoneId === zoneId && t.status !== '完成'); },
   zoneTip(zoneId) {
     const z = Zones.byId(zoneId); if (!z) return '';
-    let h = '<b>' + U.esc(z.name || z.category) + '</b><br>' + U.esc(z.category) + (z.measure ? '<br>' + U.esc(z.measure) : '') + (z.hazard ? '<br>⚠ ' + U.esc(z.hazard) : '');
+    const hz = Zones.hazardOf(z);
+    let h = '<b>' + U.esc(Zones.pathName(z)) + '</b><br>' + U.esc(z.category) + (z.measure ? '<br>' + U.esc(z.measure) : '') + (hz ? '<br>⚠ ' + U.esc(hz) : '');
     this.openTasksOf(zoneId).forEach(t => {
       const c = Tasks.crew(t), col = CFG.taskColor(t.status);
       h += '<hr class="tip-hr"><span class="tip-task" style="color:' + col + '">● ' + U.esc(t.title) + '</span>（' + U.esc(t.status) + '）' +

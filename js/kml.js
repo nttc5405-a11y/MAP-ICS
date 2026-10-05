@@ -13,7 +13,8 @@ const Kml = {
     const g = Zones.geometryOf(z);
     if (!g) return '';
     const col = z.color || CFG.catColor(z.category);
-    const desc = [z.category ? '類別：' + z.category : '', z.hazard ? '危險因子：' + z.hazard : '',
+    const par = Zones.parentOf(z);
+    const desc = [z.category ? '類別：' + z.category : '', par ? '上層區域：' + (par.name || par.category) : '', z.hazard ? '危險因子：' + z.hazard : '',
       z.measure ? '量測：' + z.measure : '', z.note ? '備註：' + z.note : ''].filter(Boolean).join('\n');
     let geom = '';
     const coordStr = arr => arr.map(c => c[0] + ',' + c[1] + ',0').join(' ');

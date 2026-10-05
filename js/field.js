@@ -121,7 +121,10 @@ const F = {
     else F.renderMap();
   },
   stColor(s) { return CFG.taskColor(s); },
-  zoneName(id) { const z = F.s.data.zones.find(x => x.id === id); return z ? (z.name || z.category) : ''; },
+  zChain(z) { const a = []; let p = z, n = 0; while (p && n++ < 10) { a.push(p); p = p.parentId ? F.s.data.zones.find(x => x.id === p.parentId) : null; } return a; },
+  zPath(z) { return F.zChain(z).reverse().map(x => x.name || x.category).join(' › '); },
+  zHaz(z) { const o = []; F.zChain(z).forEach(x => String(x.hazard || '').split(/[、,，]/).map(s => s.trim()).filter(Boolean).forEach(h => { if (o.indexOf(h) < 0) o.push(h); })); return o.join('、'); },
+  zoneName(id) { const z = F.s.data.zones.find(x => x.id === id); return z ? F.zPath(z) : ''; },
 
   /* ---------- 清單：任務 ---------- */
   renderTasks() {
@@ -266,9 +269,9 @@ const F = {
     const tasks = d.tasks.filter(t => t.zoneId === id && t.status !== '完成');
     const box = U.$('#zsheet');
     const canReport = d.member.status === '有效' && d.case.status !== '已結案';
-    box.innerHTML = '<button class="x" id="zs-x">✕</button><h3><span class="sw" style="display:inline-block;background:' + U.esc(z.color || CFG.catColor(z.category)) + '"></span> ' + U.esc(z.name || z.category) + '</h3>' +
+    box.innerHTML = '<button class="x" id="zs-x">✕</button><h3><span class="sw" style="display:inline-block;background:' + U.esc(z.color || CFG.catColor(z.category)) + '"></span> ' + U.esc(F.zPath(z)) + '</h3>' +
       '<div class="hint">' + U.esc(z.category) + (z.measure ? '・' + U.esc(z.measure) : '') + '</div>' +
-      (z.hazard ? '<div class="d-haz">⚠ 危險因子：' + U.esc(z.hazard) + '</div>' : '') +
+      (F.zHaz(z) ? '<div class="d-haz">⚠ 危險因子：' + U.esc(F.zHaz(z)) + '</div>' : '') +
       (z.note ? '<div class="d-row"><div class="k">備註</div>' + U.esc(z.note) + '</div>' : '') +
       (tasks.length ? '<div class="d-row"><div class="k">此區的任務</div>' + tasks.map(t =>
         '<button class="list-btn" data-t="' + U.esc(t.id) + '"><span style="color:' + F.stColor(t.status) + '">' + U.esc(t.title) + '</span><small>' + U.esc(t.status) + '</small></button>').join('') + '</div>' : '') +
@@ -283,7 +286,7 @@ const F = {
     F.closeSheets();
     const box = U.$('#zdrawer');
     box.innerHTML = '<button class="x" id="zd-x">✕</button><h3>區域清單（' + d.zones.length + '）</h3>' +
-      (d.zones.map(z => '<button class="zone-row" data-z="' + U.esc(z.id) + '"><span class="sw" style="background:' + U.esc(z.color || CFG.catColor(z.category)) + '"></span><span><b>' + U.esc(z.name || z.category) + '</b><br><small class="hint">' + U.esc(z.category) + (z.hazard ? '・⚠ ' + U.esc(z.hazard) : '') + '</small></span></button>').join('') || '<div class="empty">指揮所還沒有劃區域</div>');
+      (d.zones.map(z => '<button class="zone-row" data-z="' + U.esc(z.id) + '"><span class="sw" style="background:' + U.esc(z.color || CFG.catColor(z.category)) + '"></span><span><b>' + U.esc(F.zPath(z)) + '</b><br><small class="hint">' + U.esc(z.category) + (F.zHaz(z) ? '・⚠ ' + U.esc(F.zHaz(z)) : '') + '</small></span></button>').join('') || '<div class="empty">指揮所還沒有劃區域</div>');
     box.hidden = false;
     U.$('#zd-x').onclick = () => { box.hidden = true; };
     U.$$('[data-z]', box).forEach(b => b.onclick = () => { box.hidden = true; F.focusZone(b.dataset.z); F.openZone(b.dataset.z, null); });

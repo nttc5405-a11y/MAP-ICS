@@ -267,6 +267,8 @@ details summary { cursor: pointer; font-size: 13px; color: #1565c0; margin: 4px 
 .link-btn { background: none; border: 0; color: #1565c0; cursor: pointer; font-size: 14px; }
 /* 登入前把主畫面藏起來，避免閃現 */
 body.logged-out #topbar, body.logged-out #main { visibility: hidden; }
+.zone-item.child { border-left: 3px solid #90a4ae; background: #fcfdfe; }
+.kid-n { font-weight: 400; font-size: 11.5px; background: #eceff1; color: #546e7a; border-radius: 99px; padding: 0 7px; margin-left: 4px; }
 .pb-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
 .pb-ph { position: relative; width: 84px; height: 84px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); }
 .pb-ph img { width: 100%; height: 100%; object-fit: cover; }

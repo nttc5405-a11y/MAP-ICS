@@ -25,7 +25,7 @@ var ZONE_FIELDS = [
   ['id', '區域ID'], ['name', '名稱'], ['category', '類別'], ['color', '顏色'], ['geomType', '幾何類型'],
   ['radius', '半徑(m)'], ['geojson', 'GeoJSON'], ['measure', '量測'], ['hazard', '危險因子'], ['note', '備註'],
   ['created', '建立時間'], ['updated', '更新時間'],
-  ['priority', '優先序'], ['status', '搜索狀態'], ['terrain', '地形說明'], ['quality', '搜索品質說明'], ['teamId', '關聯單位ID'], ['segmentId', '關聯分區ID']
+  ['priority', '優先序'], ['status', '搜索狀態'], ['terrain', '地形說明'], ['quality', '搜索品質說明'], ['teamId', '關聯單位ID'], ['segmentId', '關聯分區ID'], ['parentId', '上層區域ID']
 ];
 var LOG_FIELDS = [
   ['time', '時間'], ['actor', '操作者'], ['action', '動作'], ['target', '對象ID'], ['content', '內容']

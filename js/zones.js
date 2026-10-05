@@ -11,6 +11,60 @@ const Zones = {
   list() { return App.state.zones; },
   byId(id) { return App.state.zones.find(z => z.id === id); },
 
+  /* ---------- 階層（A區 › A1 作業區） ---------- */
+  parentOf(z) { return z && z.parentId ? Zones.byId(z.parentId) : null; },
+  ancestors(z) { const a = []; let p = Zones.parentOf(z), n = 0; while (p && n++ < 10) { a.push(p); p = Zones.parentOf(p); } return a; },   // 由近到遠
+  childrenOf(id) { return App.state.zones.filter(x => x.parentId === id); },
+  descendants(id) { const out = []; const walk = i => Zones.childrenOf(i).forEach(c => { if (out.indexOf(c) < 0) { out.push(c); walk(c.id); } }); walk(id); return out; },
+  pathName(z) { return Zones.ancestors(z).reverse().concat([z]).map(x => x.name || x.category).join(' › '); },
+  /* 自己加上所有上層區域的危險因子（去除重複） */
+  hazardOf(z) {
+    const out = [];
+    [z].concat(Zones.ancestors(z)).forEach(x => String(x.hazard || '').split(/[、,，]/).map(s => s.trim()).filter(Boolean).forEach(h => { if (out.indexOf(h) < 0) out.push(h); }));
+    return out.join('、');
+  },
+  /* 樹狀排序：上層在前、子區域接在後面，附縮排層級 d */
+  ordered(list) {
+    const ids = {}; list.forEach(z => { ids[z.id] = 1; });
+    const kids = {};
+    list.forEach(z => { const k = (z.parentId && ids[z.parentId] && z.parentId !== z.id) ? z.parentId : ''; (kids[k] = kids[k] || []).push(z); });
+    const out = [], seen = {};
+    const walk = (k, d) => (kids[k] || []).forEach(z => { if (seen[z.id]) return; seen[z.id] = 1; out.push({ z: z, d: d }); walk(z.id, d + 1); });
+    walk('', 0);
+    list.forEach(z => { if (!seen[z.id]) out.push({ z: z, d: 0 }); });   // 保險：資料有循環時也不會漏掉
+    return out;
+  },
+  areaOf(z) {
+    const g = Zones.geometryOf(z); if (!g) return 0;
+    if (z.geomType === 'Circle') { const r = Number(z.radius) || 0; return Math.PI * r * r; }
+    return g.type === 'Polygon' ? U.ringArea(g.coordinates[0]) : 0;
+  },
+  contains(z, lng, lat) {
+    const g = Zones.geometryOf(z); if (!g) return false;
+    if (z.geomType === 'Circle') return U.haversine([lng, lat], g.coordinates) <= (Number(z.radius) || 0);
+    if (g.type !== 'Polygon') return false;
+    const r = g.coordinates[0]; let c = false;
+    for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+      if ((r[i][1] > lat) !== (r[j][1] > lat) && lng < (r[j][0] - r[i][0]) * (lat - r[i][1]) / (r[j][1] - r[i][1]) + r[i][0]) c = !c;
+    }
+    return c;
+  },
+  /* 畫新區域時，找出「包住它、面積最小」的區域當作建議的上層 */
+  suggestParent(shape, exceptId) {
+    const g = shape.geometry; let pt = null, area = 0;
+    if (g.type === 'Point') { pt = g.coordinates; area = shape.geomType === 'Circle' ? Math.PI * Math.pow(Number(shape.radius) || 0, 2) : 0; }
+    else if (g.type === 'LineString') pt = g.coordinates[Math.floor(g.coordinates.length / 2)];
+    else if (g.type === 'Polygon') {
+      const r = g.coordinates[0].slice(0, -1);
+      pt = [r.reduce((s, c) => s + c[0], 0) / r.length, r.reduce((s, c) => s + c[1], 0) / r.length];
+      area = U.ringArea(g.coordinates[0]);
+    }
+    if (!pt) return '';
+    const cands = App.state.zones.filter(z => z.id !== exceptId && (z.geomType === 'Polygon' || z.geomType === 'Circle') && Zones.areaOf(z) > area && Zones.contains(z, pt[0], pt[1]));
+    cands.sort((a, b) => Zones.areaOf(a) - Zones.areaOf(b));
+    return cands.length ? cands[0].id : '';
+  },
+
   /* 由幾何建立一筆新區域（尚未送後端）。shape: {name, category, geomType, geometry, radius} */
   newZone(shape) {
     const cat = shape.category || '其他';
@@ -18,7 +72,7 @@ const Zones = {
       id: U.uid('Z'), name: shape.name || '', category: cat, color: CFG.catColor(cat),
       geomType: shape.geomType, radius: shape.radius || '', geojson: JSON.stringify(shape.geometry),
       measure: '', hazard: '', note: '', created: U.now(), updated: U.now(),
-      priority: '', status: '', terrain: '', quality: '', teamId: '', segmentId: ''
+      priority: '', status: '', terrain: '', quality: '', teamId: '', segmentId: '', parentId: ''
     };
     z.measure = U.measure(z.geomType, shape.geometry, z.radius);
     return z;
@@ -43,6 +97,7 @@ const Zones = {
     shape.geometry = fit.geom;
     const z = Zones.newZone(shape);
     z.name = Zones.autoName(z);
+    z.parentId = Zones.suggestParent(shape, z.id);   // 畫在某區域裡面，就預設放在該區域底下（可在對話框更改）
     const ok = await Zones.openEditor(z, true);
     if (!ok) return;
     await Zones.persist(z);
@@ -60,11 +115,12 @@ const Zones = {
   async onRemovedOnMap(id) {
     const z = Zones.byId(id);
     if (!z) return;
-    const ok = await U.confirm('確定要刪除區域「' + (z.name || z.category) + '」嗎？\n刪除後無法復原（事件日誌會留下紀錄）。', '刪除', true);
+    const ok = await U.confirm('確定要刪除區域「' + (z.name || z.category) + '」嗎？' + Zones.kidNote(id) + '\n刪除後無法復原（事件日誌會留下紀錄）。', '刪除', true);
     if (!ok) { MapView.renderZones(); return; }
     await Zones.removeConfirmed(id);
   },
 
+  kidNote(id) { const n = Zones.childrenOf(id).length; return n ? '\n它底下有 ' + n + ' 個子區域，會改掛到上一層（不會被刪除）。' : ''; },
   autoName(z) {
     const same = App.state.zones.filter(x => x.category === z.category).length + 1;
     return z.category + ' ' + same;
@@ -88,6 +144,12 @@ const Zones = {
   },
   async removeConfirmed(id) {
     try {
+      const zone = Zones.byId(id), kids = Zones.childrenOf(id);
+      if (kids.length) {   // 子區域不跟著刪，改掛到被刪區域的上一層
+        const moved = kids.map(k => Object.assign(Zones.clean(k), { parentId: zone && zone.parentId ? zone.parentId : '' }));
+        await App.run(() => Api.call('saveZones', { caseId: App.state.cur.id, zones: moved, note: '刪除上層區域，子區域改掛上一層' }));
+        kids.forEach(k => { k.parentId = zone && zone.parentId ? zone.parentId : ''; });
+      }
       const r = await App.run(() => Api.call('deleteZone', { caseId: App.state.cur.id, zoneId: id }));
       App.state.zones = App.state.zones.filter(z => z.id !== id);
       App.state.version = r.version;
@@ -101,7 +163,7 @@ const Zones = {
   async remove(id) {
     const z = Zones.byId(id);
     if (!z) return;
-    if (await U.confirm('確定要刪除區域「' + (z.name || z.category) + '」嗎？\n刪除後無法復原（事件日誌會留下紀錄）。', '刪除', true)) {
+    if (await U.confirm('確定要刪除區域「' + (z.name || z.category) + '」嗎？' + Zones.kidNote(id) + '\n刪除後無法復原（事件日誌會留下紀錄）。', '刪除', true)) {
       await Zones.removeConfirmed(id);
     }
   },
@@ -115,10 +177,14 @@ const Zones = {
     const ctype = App.state.cur && App.state.cur.type, hz = [];
     ((CFG.HAZARDS_BY_TYPE && CFG.HAZARDS_BY_TYPE[ctype]) || []).concat(CFG.HAZARDS).forEach(h => { if (hz.indexOf(h) < 0) hz.push(h); });
     const chips = hz.map(h => '<button type="button" class="chip" data-h="' + U.esc(h) + '">' + U.esc(h) + '</button>').join('');
+    const bad = {}; bad[z.id] = 1; Zones.descendants(z.id).forEach(x => { bad[x.id] = 1; });   // 不能選自己或自己的子孫當上層（會變成循環）
+    const parentOpts = Zones.ordered(App.state.zones.filter(x => !bad[x.id])).map(o => '<option value="' + U.esc(o.z.id) + '"' + (o.z.id === z.parentId ? ' selected' : '') + '>' +
+      U.esc('　'.repeat(o.d) + (o.d ? '└ ' : '') + (o.z.name || o.z.category)) + '</option>').join('');
     const geomName = CFG.GEOM_NAMES[z.geomType] || z.geomType;
     const html =
       '<div class="form">' +
       '<label>名稱<input id="ze-name" type="text" maxlength="60" value="' + U.esc(z.name) + '"></label>' +
+      '<label>上層區域（例：A1 作業區的上層是 A 區）<select id="ze-parent"><option value="">（無，最上層）</option>' + parentOpts + '</select></label>' +
       '<div class="row2"><label>類別<select id="ze-cat">' + catOpts + '</select></label>' +
       '<label>顏色<input id="ze-color" type="color" value="' + U.esc(z.color || '#757575') + '"></label></div>' +
       '<label>危險因子<input id="ze-hazard" type="text" maxlength="200" value="' + U.esc(z.hazard) + '" placeholder="例：落石、濕滑（可點下方快選）"></label>' +
@@ -140,6 +206,7 @@ const Zones = {
         validate: el => { if (!U.$('#ze-name', el).value.trim()) { U.toast('請填寫名稱', 'err'); return false; } },
         onClick: el => {
           z.name = U.$('#ze-name', el).value.trim();
+          z.parentId = U.$('#ze-parent', el).value;
           z.category = U.$('#ze-cat', el).value;
           z.color = U.$('#ze-color', el).value;
           z.hazard = U.$('#ze-hazard', el).value.trim();
@@ -185,22 +252,23 @@ const Zones = {
         cats.map(c => '<option value="' + U.esc(c) + '"' + (c === Zones.filter ? ' selected' : '') + '>' + U.esc(c) + '（' +
           App.state.zones.filter(z => z.category === c).length + '）</option>').join('');
     }
-    const rows = App.state.zones.filter(z => !Zones.filter || z.category === Zones.filter);
+    // 沒有篩選類別時顯示成樹狀（子區域縮排在上層底下）；篩選時平面列出
+    const tree = Zones.ordered(App.state.zones), rows = tree.filter(o => !Zones.filter || o.z.category === Zones.filter).map(o => ({ z: o.z, d: Zones.filter ? 0 : o.d }));
     if (!rows.length) {
       box.innerHTML = '<div class="empty">' + (App.state.zones.length ? '這個類別沒有區域' :
         '還沒有任何區域。<br>用地圖左側的繪圖工具畫出標記點、線或面，或到「工具」分頁匯入 KML／GPX。') + '</div>';
       return;
     }
-    box.innerHTML = rows.map(z =>
-      '<div class="zone-item" data-id="' + U.esc(z.id) + '">' +
+    box.innerHTML = rows.map(o => { const z = o.z, nk = Zones.childrenOf(z.id).length; return '' +
+      '<div class="zone-item' + (o.d ? ' child' : '') + '" data-id="' + U.esc(z.id) + '" style="margin-left:' + (o.d * 18) + 'px">' +
       '<span class="swatch" style="background:' + U.esc(z.color || CFG.catColor(z.category)) + '"></span>' +
-      '<div class="zi-main"><div class="zi-name">' + U.esc(z.name || z.category) + '</div>' +
+      '<div class="zi-main"><div class="zi-name">' + (o.d ? '└ ' : '') + U.esc(z.name || z.category) + (nk ? ' <span class="kid-n">' + nk + ' 個子區域</span>' : '') + '</div>' +
       '<div class="zi-sub">' + U.esc(z.category) + (z.category === '搜索區' ? '・' + U.esc(z.status || '未搜') : '') + '・' + U.esc(CFG.GEOM_NAMES[z.geomType] || z.geomType) +
       (z.measure ? '・' + U.esc(z.measure) : '') + '</div>' +
       (z.hazard ? '<div class="zi-haz">⚠ ' + U.esc(z.hazard) + '</div>' : '') + '</div>' +
       '<div class="zi-btns"><button class="icon-btn" data-act="kml" title="匯出此區域 KML">⭳</button>' +
       (ro ? '' : '<button class="icon-btn" data-act="edit" title="編輯屬性">✎</button><button class="icon-btn danger" data-act="del" title="刪除">🗑</button>') +
-      '</div></div>').join('');
+      '</div></div>'; }).join('');
   },
   bindList() {
     const box = U.$('#zone-list');

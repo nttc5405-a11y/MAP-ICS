@@ -73,7 +73,7 @@ const Tasks = {
         '<div class="ui-top"><b class="t-title" style="color:' + col + '">' + U.esc(t.title) + '</b><span class="pill" style="background:' + col + '">' + U.esc(t.status) + '</span></div>' +
         (t.content ? '<div class="t-content">' + U.esc(t.content) + '</div>' : '') +
         '<div class="ui-sub">指派：' + (units.concat(people).map(U.esc).join('、') || '<i>未指派</i>') + '</div>' +
-        (z ? '<div class="ui-sub">區域：<a href="#" data-act="zone">' + U.esc(z.name || z.category) + '</a></div>' : '') +
+        (z ? '<div class="ui-sub">區域：<a href="#" data-act="zone">' + U.esc(Zones.pathName(z)) + '</a></div>' : '') +
         (t.hazard ? '<div class="zi-haz">⚠ ' + U.esc(t.hazard) + '</div>' : '') +
         '<div class="t-times">' + times + '</div>' +
         '<div class="st-row">' + btns + '</div>' +
@@ -152,7 +152,7 @@ const Tasks = {
     if (!App.needCase(true)) return;
     const isNew = !task, t = task || {};
     const selU = splitIds(t.assignUnits), selP = splitIds(t.assignPeople);
-    const zones = App.state.zones.map(z => '<option value="' + U.esc(z.id) + '"' + (z.id === t.zoneId ? ' selected' : '') + '>' + U.esc((z.name || z.category) + '（' + z.category + '）') + '</option>').join('');
+    const zones = App.state.zones.map(z => '<option value="' + U.esc(z.id) + '"' + (z.id === t.zoneId ? ' selected' : '') + '>' + U.esc(Zones.pathName(z) + '（' + z.category + '）') + '</option>').join('');
     const busy = Tasks.busy(t.id);   // 已在其他未完成任務中的單位／人員不能再選
     const units = App.state.units.map(u => {
       const b = busy.units[u.id];
@@ -184,11 +184,11 @@ const Tasks = {
           });
         };
         U.$$('input[name=au]', el).forEach(x => x.addEventListener('change', syncCrew)); syncCrew();
-        let auto = !t.hazard || (t.zoneId && Zones.byId(t.zoneId) && Zones.byId(t.zoneId).hazard === t.hazard);
+        let auto = !t.hazard || (t.zoneId && Zones.byId(t.zoneId) && Zones.hazardOf(Zones.byId(t.zoneId)) === t.hazard);
         U.$('#tk-hazard', el).addEventListener('input', () => { auto = false; });
         U.$('#tk-zone', el).addEventListener('change', e => {
           const z = Zones.byId(e.target.value);
-          if (z && z.hazard && (auto || !U.$('#tk-hazard', el).value.trim())) { U.$('#tk-hazard', el).value = z.hazard; auto = true; }
+          if (z && Zones.hazardOf(z) && (auto || !U.$('#tk-hazard', el).value.trim())) { U.$('#tk-hazard', el).value = Zones.hazardOf(z); auto = true; }
         });
       },
       buttons: [{ text: '取消', value: false }, {

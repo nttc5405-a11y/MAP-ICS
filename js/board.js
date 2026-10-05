@@ -88,7 +88,7 @@ const B = {
     document.getElementById('st-tasks').innerHTML = tasks.length ? tasks.map(k => {
       const col = CFG.taskColor(k.status), z = d.zones.find(x => x.id === k.zoneId);
       return '<div class="task"><span class="dot" style="background:' + col + '"></span><div class="tt">' + U.esc(k.title) +
-        '<small>' + U.esc(k.units.join('、')) + (z ? '・' + U.esc(z.name || z.category) : '') + '</small></div><span class="pill" style="background:' + col + '">' + U.esc(k.status) + '</span></div>';
+        '<small>' + U.esc(k.units.join('、')) + (z ? '・' + U.esc(B.path(z)) : '') + '</small></div><span class="pill" style="background:' + col + '">' + U.esc(k.status) + '</span></div>';
     }).join('') : '<div class="empty">尚無任務</div>';
     // 回報
     const reps = d.reports.slice().sort((a, b) => (a.time < b.time ? 1 : -1)).slice(0, 5);
@@ -108,7 +108,7 @@ const B = {
     const d = B.data;
     [B.zoneG, B.unitG, B.casG, B.repG, B.labelG].forEach(g => g.clearLayers());
     B.zl = {};
-    d.zones.forEach(z => {
+    d.zones.slice().sort((a, b) => B.chain(a).length - B.chain(b).length).forEach(z => {   // 上層先畫、子區域在上面
       let g; try { g = JSON.parse(z.geojson); } catch (e) { return; }
       const col = z.color || CFG.catColor(z.category);
       const st = { color: col, weight: 3, opacity: 1, fillColor: col, fillOpacity: 0.22, interactive: true };
@@ -145,8 +145,12 @@ const B = {
   },
   /* 區域的游標提示：區域資訊 + 該區未完成任務、單位與人員姓名 */
   openTasks(zid) { return B.data.tasks.filter(t => t.zoneId === zid && t.status !== '完成'); },
+  chain(z) { const a = []; let p = z, n = 0; while (p && n++ < 10) { a.push(p); p = p.parentId ? B.data.zones.find(x => x.id === p.parentId) : null; } return a; },   // 自己→上層
+  path(z) { return B.chain(z).reverse().map(x => x.name || x.category).join(' › '); },
+  hazards(z) { const o = []; B.chain(z).forEach(x => String(x.hazard || '').split(/[、,，]/).map(s => s.trim()).filter(Boolean).forEach(h => { if (o.indexOf(h) < 0) o.push(h); })); return o.join('、'); },
   zoneTip(z) {
-    let h = '<b>' + U.esc(z.name || z.category) + '</b><br>' + U.esc(z.category) + (z.measure ? '<br>' + U.esc(z.measure) : '') + (z.hazard ? '<br>⚠ ' + U.esc(z.hazard) : '');
+    const hz = B.hazards(z);
+    let h = '<b>' + U.esc(B.path(z)) + '</b><br>' + U.esc(z.category) + (z.measure ? '<br>' + U.esc(z.measure) : '') + (hz ? '<br>⚠ ' + U.esc(hz) : '');
     B.openTasks(z.id).forEach(t => {
       h += '<hr class="tip-hr"><span style="color:' + CFG.taskColor(t.status) + ';font-weight:700">● ' + U.esc(t.title) + '</span>（' + U.esc(t.status) + '）' +
         (t.units.length ? '<br>單位：' + U.esc(t.units.join('、')) : '') +

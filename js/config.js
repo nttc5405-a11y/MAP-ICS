@@ -61,6 +61,7 @@ const CFG = {
     { id: '暖區', color: '#f9a825' },
     { id: '冷區', color: '#1976d2' },
     { id: '搜索區', color: '#7b1fa2' },
+    { id: '作業區', color: '#00acc1' },
     { id: '警戒範圍', color: '#ef6c00' },
     { id: '路線／軌跡', color: '#00897b' },
     { id: '最後已知位置', color: '#c2185b' },
