@@ -82,7 +82,7 @@ var WRITE_ACTIONS = {
   regenJoinCode: 1, joinCase: 1, joinAsTemp: 1, saveTask: 1, deleteTask: 1, updateTaskStatus: 1, submitReport: 1,
   fieldTaskStatus: 1, fieldReport: 1, fieldPhoto: 1,
   saveCasualty: 1, deleteCasualty: 1, splitCasualty: 1, updateTransport: 1, fieldCasualty: 1,
-  savePlan: 1, deletePlan: 1, regenViewCode: 1, applyScheme: 1
+  savePlan: 1, deletePlan: 1, regenViewCode: 1, applyScheme: 1, uploadPhoto: 1
 };
 // 手機掃 QR 加入時還沒有個人權杖，改用「案件編號＋加入碼」驗證
 // 手機端的 field* 與 getMyStatus/getFieldData 不用管理權杖，改在函式內以個人權杖 memberToken 驗證
@@ -152,7 +152,7 @@ function doPost(e) {
     fieldPhoto: fieldPhoto_, getPhoto: getPhoto_,
     saveCasualty: saveCasualty_, deleteCasualty: deleteCasualty_, splitCasualty: splitCasualty_, updateTransport: updateTransport_,
     fieldCasualty: fieldCasualty_, savePlan: savePlan_, deletePlan: deletePlan_,
-    regenViewCode: regenViewCode_, applyScheme: applyScheme_, getBoardVersion: getBoardVersion_, getBoardData: getBoardData_
+    regenViewCode: regenViewCode_, applyScheme: applyScheme_, uploadPhoto: uploadPhoto_, getBoardVersion: getBoardVersion_, getBoardData: getBoardData_
   };
   var fn = handlers[req.action];
   if (!fn) return json_({ ok: false, error: '不認得的動作：' + req.action });
@@ -873,6 +873,16 @@ function fieldPhoto_(req) {
   if (data.length > 3000000) throw new Error('照片太大，請重拍');
   var name = a.c.id + '_' + a.m.name + '_' + Utilities.formatDate(new Date(), TZ, 'HHmmss') + '.jpg';
   var file = photoFolder_(a.c).createFile(Utilities.newBlob(Utilities.base64Decode(data), mime, name));
+  return { photoId: file.getId() };
+}
+/** 指揮所（網頁版）上傳照片：存進該案件的「照片」資料夾，回傳檔案 ID */
+function uploadPhoto_(req) {
+  var c = openCaseForWrite_(req.caseId);
+  var data = String(req.data || ''), mime = String(req.mime || 'image/jpeg');
+  if (mime.indexOf('image/') !== 0) throw new Error('只能上傳圖片');
+  if (data.length > 3000000) throw new Error('照片太大，請換較小的檔案');
+  var name = c.id + '_指揮所_' + Utilities.formatDate(new Date(), TZ, 'HHmmss') + '.jpg';
+  var file = photoFolder_(c).createFile(Utilities.newBlob(Utilities.base64Decode(data), mime, name));
   return { photoId: file.getId() };
 }
 /** 指揮所讀取照片（回傳 base64）。只允許讀該案件「照片」資料夾內的檔案 */

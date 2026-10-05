@@ -232,29 +232,27 @@ const Tasks = {
       return opts.length ? '<option value="">請選擇回報者</option>' + opts.map(o => '<option value="' + U.esc(o.v) + '">' + U.esc(o.t) + '</option>').join('') : '<option value="">（此任務尚無可選的人員）</option>';
     };
     const sts = CFG.TASK_STATUS.map(s => '<option>' + s.id + '</option>').join('');
+    const pb = U.photoBox(3);
     const html = '<div class="form">' +
       '<label>對應任務<select id="rp-task"><option value="">（不屬於任何任務）</option>' + tasks + '</select></label>' +
       '<div class="row2"><label>回報者（限該任務的編組）<select id="rp-who">' + whoOptions(taskId) + '</select></label>' +
       '<label>同時更新任務狀態<select id="rp-status"><option value="">不變更</option>' + sts + '</select></label></div>' +
       '<label>回報內容<textarea id="rp-content" rows="4" maxlength="500" placeholder="例：A 區北側發現足跡，往稜線方向"></textarea></label>' +
-      '<div class="hint">此為指揮所代登（來源記為「指揮所代登」）。照片上傳將於手機版階段提供。</div></div>';
-    const v = await U.modal({
-      title: '代登回報', html: html,
+      pb.html('照片（選填）') + '<div class="hint">此為指揮所代登（來源記為「指揮所代登」）。</div></div>';
+    const v = await U.modalWithPhotos({
+      title: '代登回報', html: html, pb: pb, submitText: '送出',
       onOpen: el => { U.$('#rp-task', el).addEventListener('change', e => { U.$('#rp-who', el).innerHTML = whoOptions(e.target.value); }); },
-      buttons: [{ text: '取消', value: false }, {
-        text: '送出', cls: 'primary',
-        validate: el => {
-          if (!U.$('#rp-who', el).value) { U.toast('請選擇回報者', 'err'); return false; }
-          if (!U.$('#rp-content', el).value.trim() && !U.$('#rp-status', el).value) { U.toast('請填寫回報內容或選擇狀態', 'err'); return false; }
-        },
-        value: el => ({ taskId: U.$('#rp-task', el).value, who: U.$('#rp-who', el).value.trim(), status: U.$('#rp-status', el).value, content: U.$('#rp-content', el).value.trim() })
-      }]
+      validate: el => {
+        if (!U.$('#rp-who', el).value) { U.toast('請選擇回報者', 'err'); return false; }
+        if (!U.$('#rp-content', el).value.trim() && !U.$('#rp-status', el).value && !pb.photos.length) { U.toast('請填寫回報內容、選擇狀態或附上照片', 'err'); return false; }
+      },
+      collect: el => ({ taskId: U.$('#rp-task', el).value, who: U.$('#rp-who', el).value.trim(), status: U.$('#rp-status', el).value, content: U.$('#rp-content', el).value.trim() })
     });
     if (!v || typeof v !== 'object') return;
     const t = v.taskId && Tasks.byId(v.taskId);
     const report = {
       id: U.uid('R'), taskId: v.taskId, zoneId: t ? t.zoneId : '', reporter: v.who, source: '指揮所代登',
-      type: v.status ? '狀態' : '文字', content: v.content || ('回報狀態：' + v.status), photos: '', coord: '', time: U.now()
+      type: v.status ? '狀態' : '文字', content: v.content || (v.status ? '回報狀態：' + v.status : '（僅照片）'), photos: v.newPhotos.join(','), coord: '', time: U.now()
     };
     const r = await Deploy.w('submitReport', { report: report }, () => App.state.reports.push(report));
     if (r && v.status && t) await Tasks.setStatus(t.id, v.status);

@@ -432,6 +432,13 @@ const Api = {
         if (!U.store.set('ccs_photo_' + pid, JSON.stringify({ mime: p.mime || 'image/jpeg', data: p.data, case: a.c.id }))) throw new Error('本機試用的儲存空間不足，無法存照片');
         return { photoId: pid };
       }
+      case 'uploadPhoto': {   // 指揮所（網頁版）上傳照片
+        const c = findCase(p.caseId); needOpen(c);
+        if (String(p.data || '').length > 3000000) throw new Error('照片太大，請換較小的檔案');
+        const pid = U.uid('P');
+        if (!U.store.set('ccs_photo_' + pid, JSON.stringify({ mime: p.mime || 'image/jpeg', data: p.data, case: c.id }))) throw new Error('本機試用的儲存空間不足，無法存照片');
+        return { photoId: pid };
+      }
       case 'getPhoto': {
         findCase(p.caseId);
         try { const o = JSON.parse(U.store.get('ccs_photo_' + p.photoId, '')); if (o && o.case === p.caseId) return o; } catch (e) { /* 找不到 */ }

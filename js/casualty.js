@@ -171,6 +171,7 @@ const Casualties = {
     const quicks = CFG.CASUALTY_QUICKS.map(q => '<button type="button" class="chip" data-q="' + U.esc(q) + '">' + U.esc(q) + '</button>').join('');
     const tri = CFG.TRIAGE.map(t => '<label class="tri-pick" style="--c:' + t.color + '"><input type="radio" name="cf-tri" value="' + t.id + '"' + (x.triage === t.id ? ' checked' : '') + '><span>' + t.id + '<small>' + t.text + '</small></span></label>').join('');
     const cnt = CFG.TRIAGE.map(t => '<label class="cnt" style="--c:' + t.color + '">' + t.id + '<input type="number" min="0" max="999" data-f="' + t.field + '" value="' + Casualties.num(x[t.field]) + '"></label>').join('');
+    const pb = U.photoBox(3); pb.existing = splitIds(x.photos).length;
     const html = '<div class="form">' +
       '<div class="seg" style="margin:0"><label class="seg-btn' + (x.mode !== '群體' ? ' active' : '') + '"><input type="radio" name="cf-mode" value="單人" hidden' + (x.mode !== '群體' ? ' checked' : '') + '>單人</label>' +
       '<label class="seg-btn' + (x.mode === '群體' ? ' active' : '') + '"><input type="radio" name="cf-mode" value="群體" hidden' + (x.mode === '群體' ? ' checked' : '') + '>多人（依檢傷填人數）</label></div>' +
@@ -180,9 +181,10 @@ const Casualties = {
       '<div id="cf-group" hidden><div class="lbl">各檢傷等級人數</div><div class="cnt-row">' + cnt + '</div></div>' +
       '<label>簡述<textarea id="cf-desc" rows="3" maxlength="300">' + U.esc(x.desc) + '</textarea></label>' +
       '<label>對應任務（選填）<select id="cf-task"><option value="">（無）</option>' + tasks + '</select></label>' +
+      pb.html('照片（選填）') +
       (isNew ? '<label class="chk"><input id="cf-pick" type="checkbox" checked> 儲存後在地圖上點選傷患位置</label>' : '') + '</div>';
-    const v = await U.modal({
-      title: isNew ? '新增傷患' : '編輯傷患', html: html,
+    const v = await U.modalWithPhotos({
+      title: isNew ? '新增傷患' : '編輯傷患', html: html, pb: pb,
       onOpen: el => {
         const sync = () => {
           const g = U.$('input[name=cf-mode]:checked', el).value === '群體';
@@ -196,25 +198,23 @@ const Casualties = {
           inp.value = cur.join('、');
         }));
       },
-      buttons: [{ text: '取消', value: false }, {
-        text: '儲存', cls: 'primary',
-        validate: el => {
-          const g = U.$('input[name=cf-mode]:checked', el).value === '群體';
-          if (!g && !U.$('input[name=cf-tri]:checked', el)) { U.toast('請選擇檢傷等級', 'err'); return false; }
-          if (g && !U.$$('input[data-f]', el).some(i => Casualties.num(i.value) > 0)) { U.toast('請至少填 1 人', 'err'); return false; }
-        },
-        value: el => {
-          const g = U.$('input[name=cf-mode]:checked', el).value === '群體', r = { mode: g ? '群體' : '單人' };
-          if (g) U.$$('input[data-f]', el).forEach(i => { r[i.dataset.f] = Casualties.num(i.value); });
-          else { r.triage = U.$('input[name=cf-tri]:checked', el).value; r.quick = U.$('#cf-quick', el).value.trim(); }
-          r.desc = U.$('#cf-desc', el).value.trim(); r.taskId = U.$('#cf-task', el).value;
-          r.pick = !!(U.$('#cf-pick', el) && U.$('#cf-pick', el).checked);
-          return r;
-        }
-      }]
+      validate: el => {
+        const g = U.$('input[name=cf-mode]:checked', el).value === '群體';
+        if (!g && !U.$('input[name=cf-tri]:checked', el)) { U.toast('請選擇檢傷等級', 'err'); return false; }
+        if (g && !U.$$('input[data-f]', el).some(i => Casualties.num(i.value) > 0)) { U.toast('請至少填 1 人', 'err'); return false; }
+      },
+      collect: el => {
+        const g = U.$('input[name=cf-mode]:checked', el).value === '群體', r = { mode: g ? '群體' : '單人' };
+        if (g) U.$$('input[data-f]', el).forEach(i => { r[i.dataset.f] = Casualties.num(i.value); });
+        else { r.triage = U.$('input[name=cf-tri]:checked', el).value; r.quick = U.$('#cf-quick', el).value.trim(); }
+        r.desc = U.$('#cf-desc', el).value.trim(); r.taskId = U.$('#cf-task', el).value;
+        r.pick = !!(U.$('#cf-pick', el) && U.$('#cf-pick', el).checked);
+        return r;
+      }
     });
     if (!v || typeof v !== 'object') return;
     const pick = v.pick; delete v.pick;
+    const newPhotos = v.newPhotos || []; delete v.newPhotos;
     if (v.mode === '群體' && !isNew && c.mode === '群體') {
       // 縮減人數時不能少於已拆出的人數
       const bad = CFG.TRIAGE.find(t => Casualties.num(v[t.field]) < App.state.casualties.filter(k => k.parentId === c.id && k.triage === t.id).length);
@@ -222,7 +222,7 @@ const Casualties = {
     }
     const rec = Object.assign({}, c || {}, v, {
       id: c ? c.id : U.uid('C'), reporter: c ? c.reporter : '指揮所', status: c ? c.status : '發現',
-      coord: c ? c.coord : '', photos: c ? c.photos : '', parentId: c ? c.parentId : '', vehicle: c ? c.vehicle : '', hospital: c ? c.hospital : ''
+      coord: c ? c.coord : '', photos: splitIds(c ? c.photos : '').concat(newPhotos).slice(0, 3).join(','), parentId: c ? c.parentId : '', vehicle: c ? c.vehicle : '', hospital: c ? c.hospital : ''
     });
     if (v.mode === '單人') CFG.TRIAGE.forEach(t => { rec[t.field] = 0; }); else rec.triage = '';
     if (isNew) { rec.tFound = U.now(); rec.time = U.now(); }
