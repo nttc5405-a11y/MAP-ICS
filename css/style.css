@@ -281,4 +281,8 @@ body.logged-out #topbar, body.logged-out #main { visibility: hidden; }
   #sidebar { position: absolute; z-index: 1200; top: var(--top-h); bottom: 0; left: 0; box-shadow: 4px 0 16px rgba(0,0,0,.2); }
   #main { position: relative; }
   .brand small, #statusbar .hint-r, .sync { display: none; }
+  #topbar { gap: 6px; padding: 0 8px; }
+  .top-btn, .mode-badge { white-space: nowrap; }
+  .brand { font-size: 15px; }
+  .ribbon { max-width: 36vw; }
 }

@@ -23,8 +23,8 @@ const Deploy = {
 
   async ensureRoster(force) {
     if (App.state.roster && !force) return App.state.roster;
-    try { App.state.roster = await App.run(() => Api.call('getRoster')); }
-    catch (e) { U.toast('讀取名冊失敗：' + e.message, 'err'); App.state.roster = { units: [], people: [] }; }
+    try { App.state.roster = await App.run(() => Api.call('getRoster', { caseId: App.state.cur ? App.state.cur.id : '' })); }
+    catch (e) { U.toast('讀取名冊失敗：' + e.message, 'err'); App.state.roster = { units: [], people: [] }; return App.state.roster; }
     return App.state.roster;
   },
 
@@ -206,6 +206,9 @@ const Deploy = {
     if (a === 'approve') Deploy.approve(id); else if (a === 'reject') Deploy.reject(id); else if (a === 'revoke') Deploy.revoke(id);
     else if (a === 'toroster') Deploy.toRoster(id);
   },
+  rosterErr(prefix, e) {
+    return /管理員密碼/.test(e.message) ? prefix + '：修改總表名冊需要管理員登入（目前是用案件驗證碼登入）' : prefix + '：' + e.message;
+  },
   /* 這位臨時人員是否已在總表名冊（名冊尚未載入時視為不在） */
   inRoster(m) {
     const r = App.state.roster;
@@ -235,7 +238,7 @@ const Deploy = {
       App.state.roster = await App.run(() => Api.call('saveRoster', { units: units, people: people, baseName: rbase, schemeNames: (roster.schemeNames || []).filter(n => n !== rbase) }));
       U.toast('已將 ' + m.name + '（' + unit + '）加入名冊', 'ok');
       Deploy.renderAll();
-    } catch (e) { U.toast('加入名冊失敗：' + e.message, 'err'); }
+    } catch (e) { U.toast(Deploy.rosterErr('加入名冊失敗', e), 'err'); }
   },
   onMemberChange(e) {
     const it = e.target.closest('.member-item'); if (!it || e.target.dataset.f !== 'group') return;
@@ -443,7 +446,7 @@ const Deploy = {
       App.state.roster = await App.run(() => Api.call('saveRoster', { units: units, people: people, baseName: baseName, schemeNames: schemeNames }));
       U.toast('名冊已儲存：' + units.length + ' 個單位、' + people.length + ' 人', 'ok');
       Deploy.renderAll();
-    } catch (e) { U.toast('儲存名冊失敗：' + e.message, 'err'); }
+    } catch (e) { U.toast(Deploy.rosterErr('儲存名冊失敗', e), 'err'); }
   }
 };
 
