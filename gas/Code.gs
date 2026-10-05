@@ -285,15 +285,24 @@ function ping_() { return { mode: 'gas', version: BACKEND_VERSION, time: nowStr_
 var SETTING_KEYS = { text: '跑馬燈文字', seconds: '跑馬燈秒數(3-120)' };
 function getSettings_() {
   var sh = master_().getSheetByName('設定');
-  var map = {};
-  readAll_(sh, [['k', '參數名稱'], ['v', '值']]).forEach(function (r) { map[r.k] = r.v; });
-  var missing = [];
-  if (!(SETTING_KEYS.text in map)) missing.push({ k: SETTING_KEYS.text, v: '' });
-  if (!(SETTING_KEYS.seconds in map)) missing.push({ k: SETTING_KEYS.seconds, v: '18' });
-  if (missing.length) {
+  var F = [['k', '參數名稱'], ['v', '值']];
+  // 同名參數若出現多列，以「最上面那一列」為準（使用者通常改最上面那列）
+  var readMap = function () {
+    var m = {};
+    readAll_(sh, F).forEach(function (r) { if (!(r.k in m)) m[r.k] = r.v; });
+    return m;
+  };
+  var map = readMap();
+  if (!(SETTING_KEYS.text in map) || !(SETTING_KEYS.seconds in map)) {
     var lock = LockService.getScriptLock();
     if (lock.tryLock(3000)) {
-      try { appendRows_(sh, [['k', '參數名稱'], ['v', '值']], missing); } finally { lock.releaseLock(); }
+      try {
+        map = readMap();   // 拿到鎖之後再讀一次，避免同時有人也在補列而重複新增
+        var missing = [];
+        if (!(SETTING_KEYS.text in map)) missing.push({ k: SETTING_KEYS.text, v: '' });
+        if (!(SETTING_KEYS.seconds in map)) missing.push({ k: SETTING_KEYS.seconds, v: '18' });
+        if (missing.length) appendRows_(sh, F, missing);
+      } finally { lock.releaseLock(); }
     }
   }
   var sec = parseInt(map[SETTING_KEYS.seconds], 10);
