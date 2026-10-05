@@ -32,6 +32,7 @@ const App = {
   bindUi() {
     U.$$('.tab-btn').forEach(b => b.addEventListener('click', () => App.switchTab(b.dataset.tab)));
     U.$('#btn-settings').addEventListener('click', App.openSettings);
+    U.$('#btn-logout').addEventListener('click', async () => { if (await U.confirm('確定要登出嗎？\n登出後會回到登入頁。', '登出')) App.leaveCase(); });
     U.$('#btn-sidebar').addEventListener('click', () => {
       document.body.classList.toggle('side-hidden'); setTimeout(() => MapView.invalidate(), 250);
     });
