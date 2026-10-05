@@ -98,7 +98,9 @@ function setup() {
   var props = PropertiesService.getScriptProperties();
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   props.setProperty('MASTER_ID', ss.getId());
-  Object.keys(MASTER_SHEETS).forEach(function (n) { ensureSheet_(ss, n, MASTER_SHEETS[n]); });
+  Object.keys(MASTER_SHEETS).forEach(function (n) {
+    if (n === '人員名冊') ensurePeopleSheet_(ss); else ensureSheet_(ss, n, MASTER_SHEETS[n]);
+  });
   var def = ss.getSheetByName('Sheet1') || ss.getSheetByName('工作表1');
   if (def && ss.getSheets().length > 1 && def.getLastRow() === 0) ss.deleteSheet(def);
 
@@ -534,15 +536,28 @@ function md5_8_(str) {
   return Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, str, Utilities.Charset.UTF_8)
     .map(function (b) { return ('0' + (b & 255).toString(16)).slice(-2); }).join('').slice(0, 8).toUpperCase();
 }
+/** 人員名冊：只確保固定欄位存在；已經有自訂的單位／編組欄（例如「消防勤務」）就不要再補一個空的「單位」欄 */
+function ensurePeopleSheet_(ss) {
+  var sh = ss.getSheetByName('人員名冊');
+  var fixed = ['人員ID', '姓名', '職務', '排序', '啟用'];
+  var hs = sh && sh.getLastColumn() > 0 ? headers_(sh) : [];
+  var hasExtra = hs.some(function (h) { return h && fixed.indexOf(h) < 0; });
+  return ensureSheet_(ss, '人員名冊', hasExtra ? fixed : fixed.concat(['單位']));
+}
 function readPeople_(sh) {
   if (sh.getLastColumn() < 1) return { people: [], schemeNames: ['單位'], baseName: '單位' };
   var hs = headers_(sh), idCol = hs.indexOf('人員ID');
   if (idCol < 0) { sh.getRange(1, hs.length + 1).setValue('人員ID'); hs.push('人員ID'); idCol = hs.length - 1; }
   var extra = [];
   hs.forEach(function (h, i) { if (h && !PEOPLE_FIXED[h]) extra.push({ name: h, col: i }); });
-  var base = '單位', hasUnit = extra.some(function (e) { return e.name === '單位'; });
-  if (!hasUnit && extra.length) base = extra[0].name;
   var last = sh.getLastRow(), vals = last > 1 ? sh.getRange(2, 1, last - 1, hs.length).getValues() : [], used = {}, people = [];
+  // 基本單位欄：「單位」欄有資料就用它；整欄都是空的（例如 setup 補上的空欄）就忽略，改用第一個有資料的方案欄
+  var filled = function (e) { return vals.some(function (r) { return String(r[e.col] == null ? '' : r[e.col]).trim() !== ''; }); };
+  var uc = extra.filter(function (e) { return e.name === '單位'; })[0];
+  var others = extra.filter(function (e) { return e.name !== '單位'; });
+  var base = '單位';
+  if (!(uc && filled(uc)) && others.length) base = (others.filter(filled)[0] || others[0]).name;
+  if (base !== '單位') extra = others;   // 空的「單位」欄不列為編組方案
   vals.forEach(function (r) { var id = String(r[idCol] || ''); if (id) used[id] = 1; });
   vals.forEach(function (r, i) {
     var p = { _row: i + 2, id: '', name: '', title: '', order: '', active: '', unit: '', schemes: {} };
