@@ -86,9 +86,9 @@ var WRITE_ACTIONS = {
 // 手機掃 QR 加入時還沒有個人權杖，改用「案件編號＋加入碼」驗證
 // 手機端的 field* 與 getMyStatus/getFieldData 不用管理權杖，改在函式內以個人權杖 memberToken 驗證
 var PUBLIC_ACTIONS = { getJoinInfo: 1, joinCase: 1, joinAsTemp: 1, getMyStatus: 1, getFieldData: 1, fieldTaskStatus: 1, fieldReport: 1, fieldPhoto: 1, fieldCasualty: 1,
-  getBoardVersion: 1, getBoardData: 1, listCases: 1, enterCase: 1, getSettings: 1 };
+  getBoardVersion: 1, getBoardData: 1, listCases: 1, enterCase: 1, getSettings: 1, createCase: 1 };
 // 只有管理員密碼（權杖）能做的操作；其餘「案件內」的操作，管理員密碼或該案件的驗證碼任一通過即可
-var ADMIN_ONLY = { createCase: 1, saveRoster: 1 };
+var ADMIN_ONLY = { saveRoster: 1 };   // createCase 在函式內檢查（管理員密碼或建案密碼）
 
 /* =====================================================================
  * 第一次使用：在編輯器選 setup 按「執行」。會建立工作表、根資料夾與管理權杖。
@@ -283,7 +283,7 @@ function ping_() { return { mode: 'gas', version: BACKEND_VERSION, time: nowStr_
 
 /** 跑馬燈等系統設定：存在總表「設定」分頁（參數名稱／值），改了立刻生效、不用重新部署。
  *  缺少的參數會自動補上預設列，方便直接在試算表修改。 */
-var SETTING_KEYS = { text: '跑馬燈文字', seconds: '跑馬燈秒數(3-120)' };
+var SETTING_KEYS = { text: '跑馬燈文字', seconds: '跑馬燈秒數(3-120)', createPass: '建案密碼' };
 function getSettings_() {
   var sh = master_().getSheetByName('設定');
   var F = [['k', '參數名稱'], ['v', '值']];
@@ -294,7 +294,7 @@ function getSettings_() {
     return m;
   };
   var map = readMap();
-  if (!(SETTING_KEYS.text in map) || !(SETTING_KEYS.seconds in map)) {
+  if (!(SETTING_KEYS.text in map) || !(SETTING_KEYS.seconds in map) || !(SETTING_KEYS.createPass in map)) {
     var lock = LockService.getScriptLock();
     if (lock.tryLock(3000)) {
       try {
@@ -302,6 +302,7 @@ function getSettings_() {
         var missing = [];
         if (!(SETTING_KEYS.text in map)) missing.push({ k: SETTING_KEYS.text, v: '' });
         if (!(SETTING_KEYS.seconds in map)) missing.push({ k: SETTING_KEYS.seconds, v: '18' });
+        if (!(SETTING_KEYS.createPass in map)) missing.push({ k: SETTING_KEYS.createPass, v: '' });
         if (missing.length) appendRows_(sh, F, missing);
       } finally { lock.releaseLock(); }
     }
@@ -309,7 +310,17 @@ function getSettings_() {
   var sec = parseInt(map[SETTING_KEYS.seconds], 10);
   if (!(sec >= 3)) sec = 18;
   if (sec > 120) sec = 120;
-  return { marqueeText: String(map[SETTING_KEYS.text] || '').trim(), marqueeSeconds: sec };
+  // 建案密碼本身不會回傳，只告訴網頁「建案要不要密碼」
+  return { marqueeText: String(map[SETTING_KEYS.text] || '').trim(), marqueeSeconds: sec, createRequiresPassword: String(map[SETTING_KEYS.createPass] || '').trim() !== '' };
+}
+
+/** 讀「設定」分頁某個參數（同名多列以最上面那列為準） */
+function settingValue_(key) {
+  var v = '', found = false;
+  readAll_(master_().getSheetByName('設定'), [['k', '參數名稱'], ['v', '值']]).forEach(function (r) {
+    if (!found && r.k === key) { v = r.v; found = true; }
+  });
+  return String(v || '').trim();
 }
 
 /** 登入頁用的案件清單：沒有管理員密碼時只給基本資料（不含任何驗證碼／連結） */
@@ -378,6 +389,9 @@ function createCase_(req) {
   if (!name) throw new Error('請填寫案件名稱');
   var pass = String(f.passcode || '').trim();
   if (pass.length < 4) throw new Error('請設定案件驗證碼（至少 4 個字元）');
+  // 建案權限：管理員密碼（權杖）永遠可以；否則看「設定」分頁的「建案密碼」——空白＝開放任何人建案，有填就必須輸入正確
+  var need = settingValue_(SETTING_KEYS.createPass);
+  if (!req._admin && need && !safeEqual_(String(req.createPass || ''), need)) { Utilities.sleep(800); throw new Error('建案密碼錯誤，請向管理員索取'); }
   var rootId = rootFolderId_();
   if (!rootId) throw new Error('後端尚未初始化，請先執行 setup()');
 
@@ -405,7 +419,9 @@ function createCase_(req) {
   appendRows_(idx, CASE_FIELDS, [c]);
   logEvent_(ss, req.actor, '建立案件', id, name);
   putVerCache_(c);
-  return caseOut_(c);
+  var out = caseOut_(c);
+  out.viaAdmin = !!req._admin;   // 讓網頁知道剛剛輸入的是管理員密碼（才記住它），還是建案密碼
+  return out;
 }
 
 function updateCase_(req) {

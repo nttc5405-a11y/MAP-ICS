@@ -2,6 +2,7 @@
 const Login = {
   KEY: 'ccs_session',
   cases: [],
+  needCreatePass: false,
 
   /* ---------- 登入狀態（存在這個瀏覽器） ---------- */
   session() { try { const s = JSON.parse(U.store.get(Login.KEY, '')); return s && s.caseId ? s : null; } catch (e) { return null; } },
@@ -41,6 +42,15 @@ const Login = {
     ['lg-pass', 'lg-newname', 'lg-newplace', 'lg-newpass', 'lg-bpass'].forEach(id => { U.$('#' + id).value = ''; });   // 登出後不殘留上一次輸入
     App.loadMarquee();
     await Login.load();
+  },
+  /* 依後端設定顯示建案密碼欄：設定分頁「建案密碼」有填 → 一般人要輸入；空白 → 任何人都能建案（管理員瀏覽器可留空） */
+  applySettings(s) {
+    Login.needCreatePass = !!s.createRequiresPassword;
+    const isAdmin = !!(Api.token() && !Api.isLocal()), f = U.$('#lg-adminpw'), hint = U.$('#lg-create-hint');
+    f.hidden = Api.isLocal() || !(isAdmin || Login.needCreatePass);
+    f.placeholder = isAdmin ? '管理員密碼（此瀏覽器已儲存，可留空）' : '建案密碼（向管理員索取）';
+    hint.textContent = Api.isLocal() ? '' : isAdmin ? (Login.needCreatePass ? '目前建案需要密碼；此瀏覽器是管理員，可直接建立。' : '目前開放任何人建立案件。')
+      : Login.needCreatePass ? '建立案件需要建案密碼，請向管理員索取。' : '目前開放任何人建立案件。';
   },
   hide() { U.$('#login').hidden = true; document.body.classList.remove('logged-out'); },
 
@@ -95,16 +105,16 @@ const Login = {
     if (!f.name) { U.toast('請填寫案件名稱', 'err'); return; }
     if (f.passcode.length < 4) { U.toast('請設定案件驗證碼（至少 4 個字元），並告知要進入的人', 'err'); return; }
     const adminpw = U.$('#lg-adminpw').value.trim();
-    if (!Api.isLocal() && !adminpw && !Api.token()) { U.toast('建立案件需要管理員密碼（管理權杖）', 'err'); return; }
+    if (!Api.isLocal() && !adminpw && !Api.token() && Login.needCreatePass) { U.toast('建立案件需要建案密碼，請向管理員索取', 'err'); return; }
     await Login.busy(U.$('#lg-create'), async () => {
       try {
-        const c = await Api.call('createCase', { fields: f, _token: adminpw });
-        if (adminpw && !Api.isLocal()) U.store.set(Api.KEY_TOKEN, adminpw);   // 建立成功，順便記住，下次免輸入
+        const c = await Api.call('createCase', { fields: f, _token: adminpw, createPass: adminpw });
+        if (adminpw && !Api.isLocal() && c.viaAdmin) U.store.set(Api.KEY_TOKEN, adminpw);   // 輸入的是管理員密碼才記住；建案密碼不記
         Login.save(c.id, f.passcode);
         Login.hide();
         U.toast('已建立案件 ' + c.id + '，驗證碼：' + f.passcode + '（請告知同仁）', 'ok');
         if (!await App.openCase(c.id)) Login.show('開啟案件失敗，請重新登入');
-      } catch (e) { U.toast(/權杖/.test(e.message) ? '管理員密碼錯誤' : e.message, 'err'); }
+      } catch (e) { U.toast(e.message, 'err'); }
     });
   },
 

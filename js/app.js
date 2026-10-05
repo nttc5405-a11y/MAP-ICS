@@ -241,6 +241,7 @@ const App = {
       const s = await Api.call('getSettings');
       U.marquee(U.$('#mq-login'), s.marqueeText, s.marqueeSeconds);
       U.marquee(U.$('#mq-main'), s.marqueeText, s.marqueeSeconds);
+      if (typeof Login !== 'undefined') Login.applySettings(s);
     } catch (e) { /* 公告抓不到就不顯示，不影響使用 */ }
   },
 
