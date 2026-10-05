@@ -528,7 +528,7 @@ const F = {
     box.innerHTML = (msg ? '<div class="banner err" style="margin:-12px -12px 12px">' + U.esc(msg) + '</div>' : '') +
       '<div class="card"><div class="hint">加入案件</div><h2>' + U.esc(info.name) + '</h2><div class="hint">' + U.esc(info.type) + '案件・請選擇您是誰</div></div>' +
       (meOk ? '<button class="big-btn" id="j-me" style="margin-bottom:12px">以 ' + U.esc(me.name) + '（' + U.esc(me.unit) + '）加入</button>' : '') +
-      '<div class="field"><input id="j-q" type="search" placeholder="🔍 輸入姓名或單位搜尋" autocomplete="off"></div>' +
+      '<div class="field"><input id="j-q" type="search" placeholder="🔍 輸入姓名或組別搜尋" autocomplete="off"></div>' +
       '<div id="j-res"></div>' +
       '<button class="link-btn" id="j-tmp">找不到我，以臨時人員加入</button>';
     if (meOk) U.$('#j-me').onclick = () => F.confirmJoin(meOk);
@@ -538,16 +538,16 @@ const F = {
   },
   drawJoinResults() {
     const info = F.s.info, box = U.$('#j-res'), q = F.j.q.trim();
-    const pbtn = p => '<button class="list-btn" data-p="' + U.esc(p.id) + '">' + U.esc(p.name) + '<small>' + U.esc(p.unit) + (p.title ? '・' + U.esc(p.title) : '') + '</small></button>';
+    const pbtn = p => '<button class="list-btn" data-p="' + U.esc(p.id) + '">' + U.esc(p.name) + '<small>' + U.esc(p.group || p.unit) + (p.title ? '・' + U.esc(p.title) : '') + '</small></button>';
     let html;
     if (q) {
-      const res = info.people.filter(p => F.subseq(q, p.name) || p.unit.indexOf(q) >= 0 || F.subseq(q, p.unit + p.name));
+      const res = info.people.filter(p => F.subseq(q, p.name) || (p.group || '').indexOf(q) >= 0 || p.unit.indexOf(q) >= 0 || F.subseq(q, (p.group || p.unit) + p.name));
       html = res.length ? res.map(pbtn).join('') : '<div class="empty">找不到符合的人員</div>';
     } else if (F.j.unit) {
       html = '<button class="back" id="j-back">← 回單位列表</button><div class="hint" style="margin-bottom:6px">' + U.esc(F.j.unit) + '</div>' +
-        info.people.filter(p => p.unit === F.j.unit).map(pbtn).join('');
+        info.people.filter(p => (p.group || p.unit) === F.j.unit).map(pbtn).join('');
     } else {
-      html = '<div class="hint" style="margin-bottom:6px">或先選單位：</div><div class="unit-grid">' +
+      html = '<div class="hint" style="margin-bottom:6px">或先選' + (info.scheme ? '組別（' + U.esc(info.scheme) + '）' : '單位') + '：</div><div class="unit-grid">' +
         info.units.map(u => '<button class="list-btn" data-u="' + U.esc(u.name) + '">' + U.esc(u.name) + '</button>').join('') + '</div>';
     }
     box.innerHTML = html;
@@ -558,7 +558,7 @@ const F = {
   async confirmJoin(p) {
     if (!p) return;
     const ok = await U.modal({
-      title: '確認身分', html: '<p class="confirm-msg">我是 <b>' + U.esc(p.name) + '</b>（' + U.esc(p.unit) + '）</p>',
+      title: '確認身分', html: '<p class="confirm-msg">我是 <b>' + U.esc(p.name) + '</b>（' + U.esc(p.group || p.unit) + '）</p>',
       buttons: [{ text: '不是我', value: false }, { text: '確認加入', cls: 'primary', value: true }]
     });
     if (ok !== true) return;

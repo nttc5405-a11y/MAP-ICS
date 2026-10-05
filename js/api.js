@@ -59,6 +59,7 @@ const Api = {
     const R = d.roster;   // 舊資料補齊「編組方案」欄位
     R.baseName = R.baseName || '單位'; R.schemeNames = R.schemeNames || [R.baseName];
     R.people.forEach(p => { p.schemes = p.schemes || {}; if (!(R.baseName in p.schemes)) p.schemes[R.baseName] = p.unit; });
+    R.units = Api.deriveUnits(R.people);
     return d;
   },
   /* 本機試用的範例名冊（人名為虛構，請到「名冊管理」改成實際資料） */
@@ -102,6 +103,9 @@ const Api = {
       if (String(z.geojson || '').length > CFG.CELL_MAX) throw new Error('區域「' + (z.name || z.id) + '」幾何資料過大（超過 ' + CFG.CELL_MAX + ' 字元）');
     };
     const lst = (key, cid) => (d[key][cid] = d[key][cid] || []);
+    const ensureGroupUnit = (cid, scheme, g) => {   // 啟動編組後，新組別有人加入時自動建立成可派遣單位
+      if (scheme && g && !lst('units', cid).some(u => u.name === g)) lst('units', cid).push({ id: 'G' + Api.hash(g), name: g, vehicles: '', leader: '', lat: '', lng: '', status: '待命', updated: U.now() });
+    };
     const ids = s => String(s || '').split(',').map(x => x.trim()).filter(Boolean);
     /* 手機權杖驗證：權杖對得上、未撤銷、加入未滿 24 小時。needActive=true 時還要求已確認（有效）且案件未結案 */
     const authMember = (q, needActive) => {
@@ -230,7 +234,7 @@ const Api = {
         touch(c); Api.saveDb(d); return { version: c.version, scheme: scheme, added: added.length, changed: changed };
       }
       case 'saveRoster':
-        d.roster = { units: p.units || [], people: p.people || [], baseName: p.baseName || '單位', schemeNames: [p.baseName || '單位'].concat((p.schemeNames || []).filter(n => n !== (p.baseName || '單位'))) };
+        d.roster = { units: Api.deriveUnits(p.people || []), people: p.people || [], baseName: p.baseName || '單位', schemeNames: [p.baseName || '單位'].concat((p.schemeNames || []).filter(n => n !== (p.baseName || '單位'))) };
         Api.saveDb(d); return d.roster;
 
       case 'saveUnit': {
@@ -260,6 +264,7 @@ const Api = {
           group: m.group || Api.schemeGroup(d.roster.people.find(x => x.name === m.name.trim() && x.unit === (m.unit || '')), c.scheme) || m.unit || '', phone: m.phone || '', joined: U.now(), device: '指揮所代登', token: ''
         };
         lst('members', c.id).push(rec);
+        ensureGroupUnit(c.id, c.scheme, rec.group);
         log(c.id, p.actor, '代為加入人員', rec.id, rec.name + '（' + rec.unit + '）');
         touch(c); Api.saveDb(d); return { member: rec, version: c.version };
       }
@@ -299,10 +304,13 @@ const Api = {
         const c = findCase(p.caseId);
         if (String(p.code) !== String(c.joinCode)) throw new Error('加入碼錯誤或已失效');
         needOpen(c);
-        return {
-          caseId: c.id, name: c.name, type: c.type, units: d.roster.units,
-          people: d.roster.people.filter(x => x.active !== '否')
-        };
+        const groups = [];
+        const people = d.roster.people.filter(x => x.active !== '否').map(x => {
+          const g = Api.schemeGroup(x, c.scheme);
+          if (g && groups.indexOf(g) < 0) groups.push(g);
+          return { id: x.id, name: x.name, unit: x.unit, title: x.title, group: g };
+        });
+        return { caseId: c.id, name: c.name, type: c.type, scheme: c.scheme || '', units: groups.map(g => ({ name: g })), people: people };
       }
       case 'joinCase': {
         const c = findCase(p.caseId);
@@ -319,6 +327,7 @@ const Api = {
         } else {
           m = { id: U.uid('M'), name: person.name, unit: person.unit, identity: '名冊', status: '有效', group: Api.schemeGroup(person, c.scheme), phone: '', joined: U.now(), device: p.device || '', token: token };
           lst('members', c.id).push(m);
+          ensureGroupUnit(c.id, c.scheme, m.group);
           log(c.id, person.name, '加入案件', m.id, person.name + '（' + person.unit + '）');
         }
         touch(c); Api.saveDb(d); return { member: m, token: token };
@@ -596,6 +605,18 @@ const Api = {
     return r;
   },
 
+  /* 單位清單由名冊人員的「基本單位」推導（不再有單位名冊） */
+  deriveUnits(people) {
+    const seen = {}, out = [];
+    people.forEach(p => {
+      if (p.unit && !seen[p.unit]) {
+        seen[p.unit] = 1;
+        const n = p.unit;
+        out.push({ id: 'U' + Api.hash(n), name: n, category: /義消|義勇/.test(n) ? '義消' : /空勤|民間|支援|搜救隊|協會|山協/.test(n) ? '外部支援' : '分隊', vehicles: '', order: out.length + 1 });
+      }
+    });
+    return out;
+  },
   schemeGroup(person, scheme) { return !person ? '' : (scheme && person.schemes && person.schemes[scheme]) || person.unit; },
   hash(s) { let h = 5381; for (const ch of String(s)) h = ((h << 5) + h + ch.charCodeAt(0)) >>> 0; return h.toString(16).toUpperCase(); },
   casLabel(x) {
