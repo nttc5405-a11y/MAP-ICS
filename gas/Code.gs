@@ -175,6 +175,13 @@ function safeEqual_(a, b) {
   var r = 0; for (var i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return r === 0;
 }
+/** 時間欄位（time、tXxx）只接受 yyyy/MM/dd HH:mm(:ss)；格式不對就換成伺服器現在時間，避免有人塞入惡意文字 */
+function cleanTimes_(rec) {
+  Object.keys(rec).forEach(function (k) {
+    if (/^(time|t[A-Z][A-Za-z]*)$/.test(k) && rec[k] !== '' && rec[k] != null && !/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}(:\d{2})?$/.test(String(rec[k]))) rec[k] = nowStr_();
+  });
+  return rec;
+}
 function nowStr_() { return Utilities.formatDate(new Date(), TZ, 'yyyy/MM/dd HH:mm:ss'); }
 
 /* =====================================================================
@@ -816,7 +823,7 @@ function saveTask_(req) {
   var merged = {};
   Object.keys(old || {}).forEach(function (k) { merged[k] = old[k]; });
   Object.keys(t).forEach(function (k) { merged[k] = t[k]; });
-  var rec = pick_(TASK_FIELDS, merged);
+  var rec = cleanTimes_(pick_(TASK_FIELDS, merged));
   if (!old) { rec.status = rec.status || '已派遣'; rec.tAssigned = rec.tAssigned || nowStr_(); }
   upsertById_(sh, TASK_FIELDS, rec);
   logEvent_(ss, req.actor, old ? '修改任務' : '派遣任務', rec.id, rec.title);
@@ -845,7 +852,7 @@ function updateTaskStatus_(req) {
 function submitReport_(req) {
   var c = openCaseForWrite_(req.caseId), ss = caseSs_(c), r = req.report || {};
   if (!String(r.content || '').trim()) throw new Error('請填寫回報內容');
-  var rec = pick_(REPORT_FIELDS, r);
+  var rec = cleanTimes_(pick_(REPORT_FIELDS, r));
   rec.id = rec.id || ('R' + Utilities.getUuid().replace(/-/g, '').slice(0, 10).toUpperCase());
   rec.source = rec.source || '指揮所代登'; rec.type = rec.type || '文字'; rec.time = rec.time || nowStr_();
   appendRows_(sheet_(ss, '回報'), REPORT_FIELDS, [rec]);
@@ -1062,7 +1069,7 @@ function saveCasualty_(req) {
   var merged = {};
   Object.keys(old || {}).forEach(function (k) { merged[k] = old[k]; });
   Object.keys(x).forEach(function (k) { merged[k] = x[k]; });
-  var rec = pick_(CAS_FIELDS, normCasualty_(merged));
+  var rec = cleanTimes_(pick_(CAS_FIELDS, normCasualty_(merged)));
   if (!old) { rec.status = rec.status || '發現'; rec.tFound = rec.tFound || nowStr_(); rec.time = rec.time || nowStr_(); }
   upsertById_(sh, CAS_FIELDS, rec);
   logEvent_(ss, req.actor, old ? '修改傷患' : '新增傷患', rec.id, casLabel_(rec));

@@ -5,7 +5,7 @@ const F = {
   map: null,
   j: { q: '', unit: '' },
 
-  hm(s) { return s ? String(s).slice(5, 16) : ''; },
+  hm(s) { return s ? U.esc(String(s).slice(5, 16)) : ''; },
   sessionKey() { return 'ccs_f_' + F.s.caseId; },
   ids(s) { return String(s || '').split(',').map(x => x.trim()).filter(Boolean); },
   device() {

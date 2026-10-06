@@ -3,7 +3,7 @@ const Tasks = {
   filter: 'active',   // active | done | all
 
   byId(id) { return App.state.tasks.find(t => t.id === id); },
-  hm(s) { return s ? String(s).slice(5, 16) : ''; },   // 'yyyy/MM/dd HH:mm:ss' → 'MM/dd HH:mm'
+  hm(s) { return s ? U.esc(String(s).slice(5, 16)) : ''; },   // 'yyyy/MM/dd HH:mm:ss' → 'MM/dd HH:mm'
 
   bind() {
     U.$('#btn-new-task').addEventListener('click', () => Tasks.openForm(null));
