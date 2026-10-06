@@ -169,6 +169,12 @@ body.readonly .leaflet-pm-toolbar { display: none; }
 .chk { display: flex; align-items: center; gap: 6px; padding: 5px 0; font-size: 14px; color: var(--text); cursor: pointer; flex-direction: row !important; }
 .chk input { width: auto; flex: none; }
 .chk.dis { opacity: .5; }
+.tu-list { max-height: 300px; }
+.tu { border-bottom: 1px solid var(--line); padding: 2px 0; }
+.tu:last-child { border-bottom: 0; }
+.tu-h { font-size: 14px; }
+.tu-ms { margin-left: 22px; }
+.tu-m { padding: 3px 0; font-size: 13px; }
 .lbl { font-size: 13.5px; color: var(--sub); margin-top: 2px; }
 .empty.small { padding: 10px; }
 .t-title { font-size: 15px; }

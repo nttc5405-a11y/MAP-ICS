@@ -147,6 +147,17 @@ const Tasks = {
     Tasks.renderAll();
   },
 
+  /* 讀取表單勾選：單位全員都勾 → 記為整單位派遣；只勾一部分 → 只記個別人員；無人員的單位 → 勾單位本身 */
+  pick(el) {
+    const units = [], people = [];
+    U.$$('.tu', el).forEach(b => {
+      const uid = b.dataset.uid, h = U.$('.uh', b), all = U.$$('input[name=ap]', b), on = all.filter(x => x.checked);
+      if (!all.length) { if (h && h.checked) units.push(uid); return; }
+      if (uid && on.length === all.length) units.push(uid); else on.forEach(x => people.push(x.value));
+    });
+    return { units: units, people: people };
+  },
+
   /* ---------- 派遣／編輯表單 ---------- */
   async openForm(task) {
     if (!App.needCase(true)) return;
@@ -154,36 +165,52 @@ const Tasks = {
     const selU = splitIds(t.assignUnits), selP = splitIds(t.assignPeople);
     const zones = App.state.zones.map(z => '<option value="' + U.esc(z.id) + '"' + (z.id === t.zoneId ? ' selected' : '') + '>' + U.esc(Zones.pathName(z) + '（' + z.category + '）') + '</option>').join('');
     const busy = Tasks.busy(t.id);   // 已在其他未完成任務中的單位／人員不能再選
-    const units = App.state.units.map(u => {
-      const b = busy.units[u.id];
-      return '<label class="chk' + (b ? ' dis' : '') + '"><input type="checkbox" name="au" value="' + U.esc(u.id) + '"' + (b ? ' disabled' : (selU.indexOf(u.id) >= 0 ? ' checked' : '')) + '> ' + U.esc(u.name) +
-        (b ? ' <span class="hint">任務中：' + U.esc(b) + '</span>' : '') + '</label>';
+    // 只列出已加入案件的單位；每個單位底下列出其有效人員。勾單位 = 預設勾選全部可派人員，之後可個別取消
+    const ms = App.state.members.filter(m => m.status === '有效');
+    const unitOf = m => App.state.units.find(x => x.name === (m.group || m.unit));
+    const mLabel = m => {
+      const b = busy.people[m.id];
+      return '<label class="chk tu-m' + (b ? ' dis' : '') + '"><input type="checkbox" name="ap" value="' + U.esc(m.id) + '"' + (b ? ' disabled' : '') + '> ' +
+        U.esc(m.name) + (b ? ' <span class="hint">任務中：' + U.esc(b) + '</span>' : '') + '</label>';
+    };
+    const unitBlocks = App.state.units.map(u => {
+      const mem = ms.filter(m => { const x = unitOf(m); return x && x.id === u.id; });
+      const ub = !mem.length && busy.units[u.id];
+      return '<div class="tu" data-uid="' + U.esc(u.id) + '"><label class="chk tu-h' + (ub ? ' dis' : '') + '"><input type="checkbox" class="uh" value="' + U.esc(u.id) + '"' + (ub ? ' disabled' : '') + '> <b>' + U.esc(u.name) + '</b> <span class="hint">' +
+        (mem.length ? mem.length + ' 人' : '無人員，整單位派遣') + (ub ? '・任務中：' + U.esc(ub) : '') + '</span></label>' +
+        (mem.length ? '<div class="tu-ms">' + mem.map(mLabel).join('') + '</div>' : '') + '</div>';
     }).join('');
-    const people = App.state.members.filter(m => m.status === '有效').map(m => {
-      const b = busy.people[m.id], un = App.state.units.find(x => x.name === (m.group || m.unit));
-      return '<label class="chk' + (b ? ' dis' : '') + '"><input type="checkbox" name="ap" value="' + U.esc(m.id) + '" data-unit="' + U.esc(un ? un.id : '') + '"' + (b ? ' disabled' : (selP.indexOf(m.id) >= 0 ? ' checked' : '')) + '> ' +
-        U.esc(m.name) + ' <span class="hint">' + U.esc(m.group || m.unit) + (b ? '・任務中：' + U.esc(b) : '') + '</span></label>';
-    }).join('');
+    const others = ms.filter(m => !unitOf(m));
+    const otherBlock = others.length ? '<div class="tu"><div class="hint" style="padding:4px 0">未編入已加入單位的人員</div><div class="tu-ms">' + others.map(mLabel).join('') + '</div></div>' : '';
+    const sel = unitBlocks + otherBlock;
     const html = '<div class="form">' +
       '<label>任務標題<input id="tk-title" type="text" maxlength="60" value="' + U.esc(t.title) + '" placeholder="例：搜索 A 區"></label>' +
       '<label>任務內容<textarea id="tk-content" rows="3" maxlength="500">' + U.esc(t.content) + '</textarea></label>' +
       '<label>目標區域<select id="tk-zone"><option value="">（不指定）</option>' + zones + '</select></label>' +
       '<label>危險因子<input id="tk-hazard" type="text" maxlength="200" value="' + U.esc(t.hazard) + '" placeholder="選區域會自動帶入該區的危險因子"></label>' +
-      '<div class="lbl">指派單位' + (units ? '' : '　<span class="hint">（先到「部署」加入單位）</span>') + '</div><div class="check-list">' + (units || '') + '</div>' +
-      '<div class="lbl">指派個人（選填）' + (people ? '' : '　<span class="hint">（尚無有效人員）</span>') + '</div><div class="check-list">' + (people || '') + '</div></div>';
+      '<div class="lbl">指派單位與人員' + (sel ? '　<span class="hint">勾單位＝全員出動，可再取消不派的人</span>' : '　<span class="hint">（先到「部署」加入單位）</span>') + '</div><div class="check-list tu-list">' + sel + '</div></div>';
     const v = await U.modal({
       title: isNew ? '派遣任務' : '編輯任務', html: html, wide: true,
       onOpen: el => {
-        // 勾選整個單位時，該單位成員不需再個別勾選
-        const syncCrew = () => {
-          const on = {}; U.$$('input[name=au]:checked', el).forEach(x => { on[x.value] = 1; });
-          U.$$('input[name=ap]', el).forEach(p => {
-            const covered = p.dataset.unit && on[p.dataset.unit], lbl = p.closest('label');
-            if (covered) { p.checked = false; p.disabled = true; lbl.classList.add('dis'); }
-            else if (!lbl.querySelector('.hint').textContent.includes('任務中')) { p.disabled = false; lbl.classList.remove('dis'); }
-          });
+        const blocks = U.$$('.tu', el);
+        const mems = b => U.$$('input[name=ap]:not(:disabled)', b);
+        const syncHead = b => {
+          const h = U.$('.uh', b); if (!h || h.disabled) return;
+          const m = mems(b), n = m.filter(x => x.checked).length;
+          if (m.length) { h.checked = n === m.length; h.indeterminate = n > 0 && n < m.length; }
         };
-        U.$$('input[name=au]', el).forEach(x => x.addEventListener('change', syncCrew)); syncCrew();
+        blocks.forEach(b => {
+          const h = U.$('.uh', b);
+          if (h) h.addEventListener('change', () => { h.indeterminate = false; mems(b).forEach(x => { x.checked = h.checked; }); });
+          U.$$('input[name=ap]', b).forEach(x => x.addEventListener('change', () => syncHead(b)));
+        });
+        // 編輯既有任務：整單位派遣 → 該單位全員勾選；個別人員 → 照勾
+        blocks.forEach(b => {
+          const uid = b.dataset.uid, h = U.$('.uh', b);
+          if (uid && selU.indexOf(uid) >= 0 && h && !h.disabled) { h.checked = true; mems(b).forEach(x => { x.checked = true; }); }
+          U.$$('input[name=ap]', b).forEach(x => { if (selP.indexOf(x.value) >= 0 && !x.disabled) x.checked = true; });
+          syncHead(b);
+        });
         let auto = !t.hazard || (t.zoneId && Zones.byId(t.zoneId) && Zones.hazardOf(Zones.byId(t.zoneId)) === t.hazard);
         U.$('#tk-hazard', el).addEventListener('input', () => { auto = false; });
         U.$('#tk-zone', el).addEventListener('change', e => {
@@ -195,13 +222,14 @@ const Tasks = {
         text: isNew ? '派遣' : '儲存', cls: 'primary',
         validate: el => {
           if (!U.$('#tk-title', el).value.trim()) { U.toast('請填寫任務標題', 'err'); return false; }
-          if (!U.$$('input[name=au]:checked,input[name=ap]:checked', el).length) { U.toast('請至少指派一個單位或人員', 'err'); return false; }
+          const c = Tasks.pick(el);
+          if (!c.units.length && !c.people.length) { U.toast('請至少指派一個單位或人員', 'err'); return false; }
         },
         value: el => ({
           title: U.$('#tk-title', el).value.trim(), content: U.$('#tk-content', el).value.trim(),
           zoneId: U.$('#tk-zone', el).value, hazard: U.$('#tk-hazard', el).value.trim(),
-          assignUnits: U.$$('input[name=au]:checked', el).map(x => x.value).join(','),
-          assignPeople: U.$$('input[name=ap]:checked', el).map(x => x.value).join(',')
+          assignUnits: Tasks.pick(el).units.join(','),
+          assignPeople: Tasks.pick(el).people.join(',')
         })
       }]
     });
