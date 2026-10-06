@@ -86,7 +86,7 @@ var WRITE_ACTIONS = {
 // 手機掃 QR 加入時還沒有個人權杖，改用「案件編號＋加入碼」驗證
 // 手機端的 field* 與 getMyStatus/getFieldData 不用管理權杖，改在函式內以個人權杖 memberToken 驗證
 var PUBLIC_ACTIONS = { getJoinInfo: 1, joinCase: 1, joinAsTemp: 1, getMyStatus: 1, getFieldData: 1, fieldTaskStatus: 1, fieldReport: 1, fieldPhoto: 1, fieldCasualty: 1,
-  getBoardVersion: 1, getBoardData: 1, listCases: 1, enterCase: 1, getSettings: 1, createCase: 1 };
+  getBoardVersion: 1, getBoardData: 1, getBoardPhoto: 1, listCases: 1, enterCase: 1, getSettings: 1, createCase: 1 };
 // 只有管理員密碼（權杖）能做的操作；其餘「案件內」的操作，管理員密碼或該案件的驗證碼任一通過即可
 var ADMIN_ONLY = { saveRoster: 1 };   // createCase 在函式內檢查（管理員密碼或建案密碼）
 
@@ -153,7 +153,7 @@ function doPost(e) {
     fieldPhoto: fieldPhoto_, getPhoto: getPhoto_,
     saveCasualty: saveCasualty_, deleteCasualty: deleteCasualty_, splitCasualty: splitCasualty_, updateTransport: updateTransport_,
     fieldCasualty: fieldCasualty_, savePlan: savePlan_, deletePlan: deletePlan_,
-    regenViewCode: regenViewCode_, applyScheme: applyScheme_, uploadPhoto: uploadPhoto_, getBoardVersion: getBoardVersion_, getBoardData: getBoardData_
+    regenViewCode: regenViewCode_, applyScheme: applyScheme_, uploadPhoto: uploadPhoto_, getBoardVersion: getBoardVersion_, getBoardData: getBoardData_, getBoardPhoto: getBoardPhoto_
   };
   var fn = handlers[req.action];
   if (!fn) return json_({ ok: false, error: '不認得的動作：' + req.action });
@@ -1127,7 +1127,7 @@ function deletePlan_(req) {
 
 /* =====================================================================
  * 第 6 階段：唯讀看板（投電視用）。以案件的「檢視碼」驗證，只回傳不含個資的資料：
- * 任務會附上編組人員姓名（不含電話）；不含登山計畫、傷患描述／回報者／照片。檢視碼可隨時重新產生或關閉。
+ * 任務會附上編組人員姓名（不含電話）；不含登山計畫、傷患描述／回報者；回報與傷患的照片可由看板以檢視碼讀取。檢視碼可隨時重新產生或關閉。
  * ===================================================================== */
 function regenViewCode_(req) {
   var c = openCaseForWrite_(req.caseId), ss = caseSs_(c);
@@ -1173,13 +1173,22 @@ function getBoardData_(req) {
     }),
     casualties: readAll_(sheet_(ss, '傷患'), CAS_FIELDS).map(casOut_).map(function (x) {
       return { id: x.id, mode: x.mode, triage: x.triage, red: x.red, yellow: x.yellow, green: x.green, black: x.black,
-        parentId: x.parentId, status: x.status, coord: x.coord };
+        parentId: x.parentId, status: x.status, coord: x.coord, photos: x.photos };
     }),
     reports: reports.map(function (r) {
-      return { id: r.id, time: r.time, unit: String(r.reporter || '').replace(/^.*（(.*)）$/, '$1'), content: r.content, coord: r.coord, taskId: r.taskId };
+      return { id: r.id, time: r.time, unit: String(r.reporter || '').replace(/^.*（(.*)）$/, '$1'), content: r.content, coord: r.coord, taskId: r.taskId, photos: r.photos };
     }),
     version: Number(c.version) || 0
   };
+}
+/** 看板讀照片：以檢視碼驗證，且只給「已出現在回報或傷患紀錄裡」的照片 */
+function getBoardPhoto_(req) {
+  var c = boardAuth_(req), ss = caseSs_(c), id = String(req.photoId || ''), used = false;
+  [['回報', REPORT_FIELDS], ['傷患', CAS_FIELDS]].forEach(function (p) {
+    readAll_(sheet_(ss, p[0]), p[1]).forEach(function (r) { if (ids_(r.photos).indexOf(id) >= 0) used = true; });
+  });
+  if (!used) throw new Error('找不到照片');
+  return getPhoto_({ caseId: c.id, photoId: id });
 }
 
 

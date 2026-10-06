@@ -383,3 +383,23 @@ U.copyFallback = function (text, done) {
   ta.remove();
 };
 U.safeFile = s => String(s || '').replace(/[\\/:*?"<>|]/g, '_').trim() || 'export';
+
+/* 照片縮圖：先放空框（img.thumb[data-pid]），再用 fetcher(id) 讀照片填入；讀過的存在記憶體，重畫不會重讀。點縮圖放大。 */
+U._ph = {};
+U.thumbs = ids => ids.length ? '<span class="thumbs">' + ids.map(id => '<img class="thumb" data-pid="' + U.esc(id) + '" alt="">').join('') + '</span>' : '';
+U.hydrateThumbs = (root, fetcher) => {
+  U.$$('img.thumb[data-pid]:not([src])', root).forEach(img => {
+    const id = img.dataset.pid;
+    if (!U._ph[id]) U._ph[id] = fetcher(id).then(p => 'data:' + p.mime + ';base64,' + p.data);
+    U._ph[id].then(src => { img.src = src; }, () => { delete U._ph[id]; img.classList.add('bad'); img.title = '照片讀取失敗'; });
+  });
+};
+U.lightbox = src => {
+  const d = document.createElement('div'); d.className = 'lightbox';
+  d.innerHTML = '<img alt=""><span>點一下關閉</span>'; d.firstChild.src = src;
+  d.addEventListener('click', () => d.remove()); document.body.appendChild(d);
+};
+document.addEventListener('click', e => {
+  const t = e.target.closest && e.target.closest('img.thumb');
+  if (t && t.getAttribute('src')) { e.preventDefault(); e.stopPropagation(); U.lightbox(t.src); }
+}, true);

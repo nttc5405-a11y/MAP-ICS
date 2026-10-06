@@ -62,3 +62,16 @@ body { font-family: 'Noto Sans TC', 'Microsoft JhengHei', system-ui, sans-serif;
   #side { width: 100%; max-width: none; height: 46%; }
   #bhead h1 { font-size: 22px; }
 }
+
+.thumbs { display: inline-flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; }
+.thumb { width: 84px; height: 84px; object-fit: cover; border-radius: 4px; border: 1px solid #c9d0d8; background: #e6eaee; cursor: zoom-in; }
+.thumb:not([src]) { cursor: progress; }
+.thumb.bad { background: #f3d6d6; cursor: default; }
+.lightbox { position: fixed; inset: 0; z-index: 99999; background: rgba(0,0,0,.88); display: flex; align-items: center; justify-content: center; flex-direction: column; cursor: zoom-out; }
+.lightbox img { max-width: 96vw; max-height: 90vh; object-fit: contain; }
+.lightbox span { color: #ccc; font-size: 13px; margin-top: 8px; }
+
+.task small.crew { display: block; color: var(--sub); font-size: 14px; white-space: normal; }
+.cas-photos { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.cas-photos .cp { border-left: 5px solid; padding-left: 6px; }
+.cas-photos .cp small { display: block; color: var(--sub); font-size: 13px; }

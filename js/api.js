@@ -557,6 +557,12 @@ const Api = {
         if (!c.viewCode || String(p.viewCode) !== c.viewCode) throw new Error('看板連結無效或已關閉');
         return { version: c.version, status: c.status };
       }
+      case 'getBoardPhoto': {
+        const c = findCase(p.caseId);
+        if (!c.viewCode || String(p.viewCode) !== c.viewCode) throw new Error('看板連結無效或已關閉');
+        try { const o = JSON.parse(U.store.get('ccs_photo_' + p.photoId, '')); if (o && o.case === c.id) return o; } catch (e) { /* 找不到 */ }
+        throw new Error('找不到照片');
+      }
       case 'getBoardData': {
         const c = findCase(p.caseId);
         if (!c.viewCode || String(p.viewCode) !== c.viewCode) throw new Error('看板連結無效或已關閉');
@@ -574,10 +580,10 @@ const Api = {
           })),
           casualties: lst('casualties', c.id).map(x => ({   // 傷患不含描述、回報者、照片
             id: x.id, mode: x.mode, triage: x.triage, red: x.red, yellow: x.yellow, green: x.green, black: x.black,
-            parentId: x.parentId, status: x.status, coord: x.coord
+            parentId: x.parentId, status: x.status, coord: x.coord, photos: x.photos
           })),
           reports: lst('reports', c.id).slice(-30).map(r => ({
-            id: r.id, time: r.time, unit: String(r.reporter || '').replace(/^.*（(.*)）$/, '$1'), content: r.content, coord: r.coord, taskId: r.taskId
+            id: r.id, time: r.time, unit: String(r.reporter || '').replace(/^.*（(.*)）$/, '$1'), content: r.content, coord: r.coord, taskId: r.taskId, photos: r.photos
           })),
           version: c.version
         };

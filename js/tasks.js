@@ -49,8 +49,10 @@ const Tasks = {
     return splitIds(t.assignPeople).map(id => { const m = Deploy.memberById(id); return m ? m.name : '（已移除人員）'; });
   },
 
+  hydrate() { const f = id => Api.call('getPhoto', { caseId: App.state.cur.id, photoId: id }); ['#task-list', '#report-list'].forEach(s => { const b = U.$(s); if (b) U.hydrateThumbs(b, f); }); },
+
   renderAll() {
-    Tasks.renderList(); Tasks.renderReports(); MapView.renderReports(); MapView.renderLabels();
+    Tasks.renderList(); Tasks.renderReports(); Tasks.hydrate(); MapView.renderReports(); MapView.renderLabels();
     const open = App.state.tasks.filter(t => t.status !== '完成').length;
     const b = U.$('#badge-tasks'); if (b) { b.textContent = open; b.hidden = !open; }
   },
@@ -97,7 +99,7 @@ const Tasks = {
   /* 回報附帶的照片與位置按鈕 */
   repBtns(r) {
     const n = splitIds(r.photos).length;
-    return (n ? ' <button class="btn small" data-rp="photo" data-id="' + U.esc(r.id) + '">📷 ' + n + ' 張</button>' : '') +
+    return (n ? '<div>' + U.thumbs(splitIds(r.photos)) + '</div>' : '') +
       (r.coord ? ' <button class="btn small" data-rp="loc" data-id="' + U.esc(r.id) + '">📍 位置</button>' : '');
   },
   onRepClick(e) {

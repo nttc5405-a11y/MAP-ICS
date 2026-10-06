@@ -1,4 +1,4 @@
-/* 唯讀看板：只讀、自動更新、不含個資（姓名電話、傷患描述／照片都不會出現） */
+/* 唯讀看板：只讀、自動更新、不含個資（姓名電話、傷患描述不會出現；回報與傷患的照片會顯示縮圖） */
 const B = {
   caseId: '', view: '', data: null, version: -1, map: null, fitted: false,
 
@@ -44,6 +44,7 @@ const B = {
     const p = String(coord || '').split(','), lat = parseFloat(p[0]), lng = parseFloat(p[1]);
     return p.length === 2 && U.validLatLng(lat, lng) ? { lat: lat, lng: lng } : null;
   },
+  ids(s) { return String(s || '').split(',').map(x => x.trim()).filter(Boolean); },
   num(v) { return parseInt(v, 10) || 0; },
   remaining(g) {
     const r = {}; let total = 0;
@@ -88,12 +89,19 @@ const B = {
     document.getElementById('st-tasks').innerHTML = tasks.length ? tasks.map(k => {
       const col = CFG.taskColor(k.status), z = d.zones.find(x => x.id === k.zoneId);
       return '<div class="task"><span class="dot" style="background:' + col + '"></span><div class="tt">' + U.esc(k.title) +
-        '<small>' + U.esc(k.units.join('、')) + (z ? '・' + U.esc(B.path(z)) : '') + '</small></div><span class="pill" style="background:' + col + '">' + U.esc(k.status) + '</span></div>';
+        '<small>' + U.esc(k.units.join('、')) + (z ? '・' + U.esc(B.path(z)) : '') + '</small>' +
+        (k.crew && k.crew.length ? '<small class="crew">人員（' + k.crew.length + '）：' + U.esc(k.crew.join('、')) + '</small>' : '') + '</div><span class="pill" style="background:' + col + '">' + U.esc(k.status) + '</span></div>';
     }).join('') : '<div class="empty">尚無任務</div>';
     // 回報
     const reps = d.reports.slice().sort((a, b) => (a.time < b.time ? 1 : -1)).slice(0, 5);
     document.getElementById('st-reps').innerHTML = reps.length ? reps.map(r =>
-      '<div class="rep"><small>' + U.esc(String(r.time).slice(11, 16)) + (r.unit ? '・' + U.esc(r.unit) : '') + '</small>' + U.esc(r.content) + '</div>').join('') : '<div class="empty">尚無回報</div>';
+      '<div class="rep"><small>' + U.esc(String(r.time).slice(11, 16)) + (r.unit ? '・' + U.esc(r.unit) : '') + '</small>' + U.esc(r.content) + U.thumbs(B.ids(r.photos).slice(0, 3)) + '</div>').join('') : '<div class="empty">尚無回報</div>';
+    // 傷患照片：有附照片的傷患，顯示檢傷色與縮圖
+    const cp = d.casualties.filter(c => B.ids(c.photos).length);
+    document.getElementById('st-cas').insertAdjacentHTML('beforeend', cp.length ? '<div class="cas-photos">' + cp.slice(-6).map(c =>
+      '<div class="cp" style="border-color:' + (c.mode === '群體' ? '#888' : CFG.triageColor(c.triage)) + '">' + U.thumbs(B.ids(c.photos).slice(0, 2)) + '<small>' + (c.mode === '群體' ? '多人' : '檢傷' + U.esc(c.triage)) + '・' + U.esc(c.status) + '</small></div>').join('') + '</div>' : '');
+    const f = id => Api.call('getBoardPhoto', { caseId: B.caseId, viewCode: B.view, photoId: id });
+    ['st-cas', 'st-reps'].forEach(i => U.hydrateThumbs(document.getElementById(i), f));
   },
 
   /* ---------- 地圖 ---------- */
