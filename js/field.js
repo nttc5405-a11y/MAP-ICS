@@ -500,7 +500,7 @@ const F = {
   /* ---------- 加入案件 ---------- */
   showJoinMsg(msg, retry) {
     F.showView('join');
-    U.$('#v-join').innerHTML = '<div class="card"><h2>案件管制・現場回報</h2><p>' + U.esc(msg) + '</p>' +
+    U.$('#v-join').innerHTML = '<div class="card"><h2>案件圖管系統・現場回報</h2><p>' + U.esc(msg) + '</p>' +
       (retry ? '<button class="btn52 primary" onclick="location.reload()">重新載入</button>' : '') + '</div>';
   },
   showView(v) {

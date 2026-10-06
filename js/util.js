@@ -392,7 +392,7 @@ U.copyFallback = function (text, done) {
 U.safeFile = s => String(s || '').replace(/[\\/:*?"<>|]/g, '_').trim() || 'export';
 
 /* 照片縮圖：先放空框（img.thumb[data-pid]），再用 many(ids[]) 一次讀回這批縮圖填入（讀過的存在記憶體，重畫不會重讀）。
-   點縮圖會放大：先顯示縮圖，同時用 full(id) 載入原圖；也附「在 Google Drive 開啟」連結。 */
+   正式環境點縮圖直接開 Google Drive 連結（照片設為知道連結可檢視）；本機練習模式則用放大視窗（lightbox）。 */
 U._ph = {};
 U.thumbs = ids => ids.length ? '<span class="thumbs">' + ids.map(id => '<img class="thumb" data-pid="' + U.esc(id) + '" alt="">').join('') + '</span>' : '';
 U.hydrateThumbs = (root, many, full) => {
@@ -420,5 +420,9 @@ U.lightbox = (id, preview) => {
 };
 document.addEventListener('click', e => {
   const t = e.target.closest && e.target.closest('img.thumb');
-  if (t && t.getAttribute('src')) { e.preventDefault(); e.stopPropagation(); U.lightbox(t.dataset.pid, t.src); }
+  if (t && t.getAttribute('src')) {
+    e.preventDefault(); e.stopPropagation();
+    if (Api.isLocal()) U.lightbox(t.dataset.pid, t.src);
+    else window.open('https://drive.google.com/file/d/' + encodeURIComponent(t.dataset.pid) + '/view', '_blank', 'noopener');
+  }
 }, true);

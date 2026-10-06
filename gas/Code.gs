@@ -951,15 +951,32 @@ function photoFolder_(c) {
   var root = DriveApp.getFolderById(c.folderId), it = root.getFoldersByName('照片');
   return it.hasNext() ? it.next() : root.createFolder('照片');   // 不開公開連結
 }
+/** 照片設為「知道連結的人都能檢視」，這樣點照片可以直接開 Google Drive 連結（連結內的檔案代碼是隨機長字串，不會被搜尋到）。失敗（例如機構政策禁止）就維持私人 */
+function openLink_(file) {
+  try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) { /* 維持私人 */ }
+}
+/** 【手動執行一次】把所有案件「照片」資料夾裡既有的照片也改成「知道連結的人可檢視」。在編輯器選這個函式按執行，看「執行記錄」的筆數 */
+function openAllPhotoLinks() {
+  var n = 0, fail = 0;
+  readAll_(indexSheet_(), CASE_FIELDS).forEach(function (c) {
+    try {
+      var it = photoFolder_(c).getFiles();
+      while (it.hasNext()) { var f = it.next(); try { f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); n++; } catch (e) { fail++; } }
+    } catch (e) { /* 這個案件沒有照片資料夾 */ }
+  });
+  Logger.log('已開放 ' + n + ' 張照片，失敗 ' + fail + ' 張');
+}
 /** 存一張照片；有縮圖（thumb，約 160px）時另存一個小檔，並把小檔 ID 記在原檔的「說明」欄，之後讀縮圖不必讀原圖 */
 function savePhoto_(c, data, mime, thumb, name) {
   if (mime.indexOf('image/') !== 0) throw new Error('只能上傳圖片');
   var folder = photoFolder_(c);
   var file = folder.createFile(Utilities.newBlob(Utilities.base64Decode(data), mime, name));
+  openLink_(file);
   thumb = String(thumb || '');
   if (thumb && thumb.length < 150000) {
     try {
       var tf = folder.createFile(Utilities.newBlob(Utilities.base64Decode(thumb), 'image/jpeg', name.replace(/\.jpg$/, '') + '_s.jpg'));
+      openLink_(tf);
       file.setDescription(tf.getId());
     } catch (e) { /* 縮圖存失敗不影響原圖，之後讀縮圖會改讀原圖 */ }
   }
