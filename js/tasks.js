@@ -10,7 +10,7 @@ const Tasks = {
     U.$('#btn-new-report').addEventListener('click', () => Tasks.reportDialog(null));
     U.$('#task-filter').addEventListener('change', e => { Tasks.filter = e.target.value; Tasks.renderAll(); });
     U.$('#task-list').addEventListener('click', Tasks.onClick);
-    ['#task-list', '#report-list'].forEach(sel => U.$(sel).addEventListener('click', Tasks.onRepClick, true));
+    ['#task-list', '#report-list', '#cas-list'].forEach(sel => U.$(sel).addEventListener('click', Tasks.onRepClick, true));
   },
 
   /* 任務編成：指派單位、單位內的有效人員、個別指派的人員 */
@@ -51,7 +51,7 @@ const Tasks = {
 
   hydrate() {
     const cid = App.state.cur.id, many = ids => Api.call('getPhotoThumbs', { caseId: cid, photoIds: ids }).then(r => r.photos), full = id => Api.call('getPhoto', { caseId: cid, photoId: id });
-    ['#task-list', '#report-list'].forEach(s => { const b = U.$(s); if (b) U.hydrateThumbs(b, many, full); });
+    ['#task-list', '#report-list', '#cas-list'].forEach(s => { const b = U.$(s); if (b) U.hydrateThumbs(b, many, full); });
   },
 
   renderAll() {

@@ -80,16 +80,17 @@ const Casualties = {
         '<div class="ui-sub">' + (c.quick ? U.esc(c.quick) + '・' : '') + U.esc(c.reporter || '指揮所') + '・' + Tasks.hm(c.time) + (task ? '・' + U.esc(task.title) : '') + '</div></div></div>' +
         (c.desc ? '<div class="t-content">' + U.esc(c.desc) + '</div>' : '') +
         (c.vehicle || c.hospital ? '<div class="ui-sub">' + (c.vehicle ? '🚑 ' + U.esc(c.vehicle) : '') + (c.hospital ? '　🏥 ' + U.esc(c.hospital) : '') + '</div>' : '') +
+        (splitIds(c.photos).length ? '<div>' + U.thumbs(splitIds(c.photos)) + '</div>' : '') +
         '<div class="t-times">' + times + '</div>' +
         '<div class="st-row">' + tr + '</div>' +
         '<div class="ui-btns">' +
         (Casualties.ll(c) ? '<button class="btn small" data-act="focus">📍 定位</button>' : '<span class="hint">尚無位置</span>') +
-        (splitIds(c.photos).length ? '<button class="btn small" data-act="photo">📷 ' + splitIds(c.photos).length + '</button>' : '') +
         (ro ? '' : '<button class="btn small" data-act="place">' + (Casualties.ll(c) ? '改位置' : '設位置') + '</button>' +
           (grp && rem.total > 0 ? '<button class="btn small primary" data-act="split">拆分</button>' : '') +
           '<button class="btn small" data-act="edit">編輯</button><button class="btn small danger" data-act="del">刪除</button>') +
         '</div></div>';
     }).join('');
+    Tasks.hydrate();
   },
 
   onClick(e) {
@@ -100,7 +101,6 @@ const Casualties = {
     const a = btn.dataset.act;
     if (a === 'tr') Casualties.setTransport(id, btn.dataset.s);
     else if (a === 'focus') MapView.focusCasualty(id);
-    else if (a === 'photo') Tasks.viewPhotos(Casualties.byId(id));
     else if (a === 'place') Casualties.place(id);
     else if (a === 'split') Casualties.splitDialog(id);
     else if (a === 'edit') Casualties.openForm(Casualties.byId(id));
