@@ -49,7 +49,10 @@ const Tasks = {
     return splitIds(t.assignPeople).map(id => { const m = Deploy.memberById(id); return m ? m.name : '（已移除人員）'; });
   },
 
-  hydrate() { const f = id => Api.call('getPhoto', { caseId: App.state.cur.id, photoId: id }); ['#task-list', '#report-list'].forEach(s => { const b = U.$(s); if (b) U.hydrateThumbs(b, f); }); },
+  hydrate() {
+    const cid = App.state.cur.id, many = ids => Api.call('getPhotoThumbs', { caseId: cid, photoIds: ids }).then(r => r.photos), full = id => Api.call('getPhoto', { caseId: cid, photoId: id });
+    ['#task-list', '#report-list'].forEach(s => { const b = U.$(s); if (b) U.hydrateThumbs(b, many, full); });
+  },
 
   renderAll() {
     Tasks.renderList(); Tasks.renderReports(); Tasks.hydrate(); MapView.renderReports(); MapView.renderLabels();

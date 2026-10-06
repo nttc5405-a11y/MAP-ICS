@@ -438,14 +438,14 @@ const Api = {
         const a = authMember(p, true);
         if (String(p.data || '').length > 3000000) throw new Error('照片太大，請重拍');
         const pid = U.uid('P');
-        if (!U.store.set('ccs_photo_' + pid, JSON.stringify({ mime: p.mime || 'image/jpeg', data: p.data, case: a.c.id }))) throw new Error('本機試用的儲存空間不足，無法存照片');
+        if (!U.store.set('ccs_photo_' + pid, JSON.stringify({ mime: p.mime || 'image/jpeg', data: p.data, thumb: p.thumb || '', case: a.c.id }))) throw new Error('本機試用的儲存空間不足，無法存照片');
         return { photoId: pid };
       }
       case 'uploadPhoto': {   // 指揮所（網頁版）上傳照片
         const c = findCase(p.caseId); needOpen(c);
         if (String(p.data || '').length > 3000000) throw new Error('照片太大，請換較小的檔案');
         const pid = U.uid('P');
-        if (!U.store.set('ccs_photo_' + pid, JSON.stringify({ mime: p.mime || 'image/jpeg', data: p.data, case: c.id }))) throw new Error('本機試用的儲存空間不足，無法存照片');
+        if (!U.store.set('ccs_photo_' + pid, JSON.stringify({ mime: p.mime || 'image/jpeg', data: p.data, thumb: p.thumb || '', case: c.id }))) throw new Error('本機試用的儲存空間不足，無法存照片');
         return { photoId: pid };
       }
       case 'getPhoto': {
@@ -556,6 +556,15 @@ const Api = {
         const c = findCase(p.caseId);
         if (!c.viewCode || String(p.viewCode) !== c.viewCode) throw new Error('看板連結無效或已關閉');
         return { version: c.version, status: c.status };
+      }
+      case 'getPhotoThumbs': case 'getBoardPhotoThumbs': {
+        const c = findCase(p.caseId);
+        if (action === 'getBoardPhotoThumbs' && (!c.viewCode || String(p.viewCode) !== c.viewCode)) throw new Error('看板連結無效或已關閉');
+        const out = {};
+        (p.photoIds || []).slice(0, 12).forEach(id => {
+          try { const o = JSON.parse(U.store.get('ccs_photo_' + id, '')); if (o && o.case === c.id) out[id] = { mime: 'image/jpeg', data: o.thumb || o.data }; } catch (e) { /* 略過 */ }
+        });
+        return { photos: out };
       }
       case 'getBoardPhoto': {
         const c = findCase(p.caseId);

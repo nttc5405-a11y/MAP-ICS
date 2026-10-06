@@ -83,3 +83,4 @@ body { font-family: 'Noto Sans TC', 'Microsoft JhengHei', system-ui, sans-serif;
 .cas-photos { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .cas-photos .cp { border-left: 5px solid; padding-left: 6px; }
 .cas-photos .cp small { display: block; color: var(--sub); font-size: 13px; }
+.lightbox .lb-drive { color: #8ec5ff; font-size: 14px; margin-top: 6px; text-decoration: underline; }

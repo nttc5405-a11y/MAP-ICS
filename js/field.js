@@ -384,7 +384,7 @@ const F = {
     const room = 3 - F.r.photos.length;
     if (files.length > room) U.toast('最多 3 張，只取前 ' + room + ' 張', 'err');
     for (const f of files.slice(0, room)) {
-      try { const c = await F.compress(f); if (F.r) F.r.photos.push({ preview: c.preview, b64: c.b64, id: null }); }
+      try { const c = await F.compress(f); if (F.r) F.r.photos.push({ preview: c.preview, b64: c.b64, thumb: c.thumb, id: null }); }
       catch (err) { U.toast(err.message, 'err'); }
     }
     if (F.r) F.drawPhotos();
@@ -399,7 +399,7 @@ const F = {
         const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
         cv.getContext('2d').drawImage(img, 0, 0, w, h);
         const du = cv.toDataURL('image/jpeg', 0.7);
-        URL.revokeObjectURL(url); res({ preview: du, b64: du.split(',')[1] });
+        URL.revokeObjectURL(url); res({ preview: du, b64: du.split(',')[1], thumb: U.thumbOf(cv) });
       };
       img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('無法讀取這張照片')); };
       img.src = url;
@@ -420,7 +420,7 @@ const F = {
       for (let i = 0; i < r.photos.length; i++) {
         const ph = r.photos[i]; if (ph.id) continue;
         btn.textContent = '上傳照片 ' + (i + 1) + '/' + r.photos.length + '…';
-        const up = await F.call('fieldPhoto', { mime: 'image/jpeg', data: ph.b64 });
+        const up = await F.call('fieldPhoto', { mime: 'image/jpeg', data: ph.b64, thumb: ph.thumb });
         ph.id = up.photoId; F.drawPhotos();
       }
       btn.textContent = '送出中…';

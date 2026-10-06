@@ -233,6 +233,13 @@ U.triagePie = function (counts, size) {
     '<text x="' + cx + '" y="' + (cy + size * 0.12) + '" text-anchor="middle" font-size="' + (size * 0.36).toFixed(0) + '" font-weight="700" fill="#222">' + total + '</text></svg>';
 };
 
+/* 縮圖：長邊 160px、JPEG 品質 0.6（約 5～10KB），回傳 base64 */
+U.thumbOf = function (cv) {
+  const sc = Math.min(1, 160 / Math.max(cv.width, cv.height)), t = document.createElement('canvas');
+  t.width = Math.max(1, Math.round(cv.width * sc)); t.height = Math.max(1, Math.round(cv.height * sc));
+  t.getContext('2d').drawImage(cv, 0, 0, t.width, t.height);
+  return t.toDataURL('image/jpeg', 0.6).split(',')[1];
+};
 /* 照片：長邊 1600px、JPEG 品質 0.7（約 300～500KB），回傳 { preview, b64 } */
 U.compressPhoto = function (file) {
   return new Promise((res, rej) => {
@@ -243,7 +250,7 @@ U.compressPhoto = function (file) {
       const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
       cv.getContext('2d').drawImage(img, 0, 0, w, h);
       const du = cv.toDataURL('image/jpeg', 0.7);
-      URL.revokeObjectURL(url); res({ preview: du, b64: du.split(',')[1] });
+      URL.revokeObjectURL(url); res({ preview: du, b64: du.split(',')[1], thumb: U.thumbOf(cv) });
     };
     img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('無法讀取這張照片（' + file.name + '）')); };
     img.src = url;
@@ -261,7 +268,7 @@ U.photoBox = function (max) {
       const files = Array.from(st.inp.files); st.inp.value = '';
       if (files.length > st.room()) U.toast('最多 ' + st.max + ' 張，只取前 ' + Math.max(0, st.room()) + ' 張', 'err');
       for (const f of files.slice(0, Math.max(0, st.room()))) {
-        try { const c = await U.compressPhoto(f); st.photos.push({ preview: c.preview, b64: c.b64, id: null }); } catch (e) { U.toast(e.message, 'err'); }
+        try { const c = await U.compressPhoto(f); st.photos.push({ preview: c.preview, b64: c.b64, thumb: c.thumb, id: null }); } catch (e) { U.toast(e.message, 'err'); }
       }
       st.draw();
     });
@@ -277,7 +284,7 @@ U.photoBox = function (max) {
   st.upload = async caseId => {
     const ids = [];
     for (const p of st.photos) {
-      if (!p.id) { const r = await Api.call('uploadPhoto', { caseId: caseId, mime: 'image/jpeg', data: p.b64 }); p.id = r.photoId; st.draw(); }
+      if (!p.id) { const r = await Api.call('uploadPhoto', { caseId: caseId, mime: 'image/jpeg', data: p.b64, thumb: p.thumb }); p.id = r.photoId; st.draw(); }
       ids.push(p.id);
     }
     return ids;
@@ -384,22 +391,34 @@ U.copyFallback = function (text, done) {
 };
 U.safeFile = s => String(s || '').replace(/[\\/:*?"<>|]/g, '_').trim() || 'export';
 
-/* 照片縮圖：先放空框（img.thumb[data-pid]），再用 fetcher(id) 讀照片填入；讀過的存在記憶體，重畫不會重讀。點縮圖放大。 */
+/* 照片縮圖：先放空框（img.thumb[data-pid]），再用 many(ids[]) 一次讀回這批縮圖填入（讀過的存在記憶體，重畫不會重讀）。
+   點縮圖會放大：先顯示縮圖，同時用 full(id) 載入原圖；也附「在 Google Drive 開啟」連結。 */
 U._ph = {};
 U.thumbs = ids => ids.length ? '<span class="thumbs">' + ids.map(id => '<img class="thumb" data-pid="' + U.esc(id) + '" alt="">').join('') + '</span>' : '';
-U.hydrateThumbs = (root, fetcher) => {
-  U.$$('img.thumb[data-pid]:not([src])', root).forEach(img => {
-    const id = img.dataset.pid;
-    if (!U._ph[id]) U._ph[id] = fetcher(id).then(p => 'data:' + p.mime + ';base64,' + p.data);
-    U._ph[id].then(src => { img.src = src; }, () => { delete U._ph[id]; img.classList.add('bad'); img.title = '照片讀取失敗'; });
-  });
+U.hydrateThumbs = (root, many, full) => {
+  if (full) U._full = full;
+  const imgs = U.$$('img.thumb[data-pid]:not([src])', root);
+  const need = imgs.map(i => i.dataset.pid).filter((id, i, a) => a.indexOf(id) === i && !U._ph[id]);
+  if (need.length) {
+    const p = many(need);
+    need.forEach(id => {
+      U._ph[id] = p.then(m => { if (!m || !m[id]) throw new Error('讀不到'); return 'data:' + m[id].mime + ';base64,' + m[id].data; });
+      U._ph[id].catch(() => { delete U._ph[id]; });
+    });
+  }
+  imgs.forEach(img => { const pr = U._ph[img.dataset.pid]; if (pr) pr.then(s => { img.src = s; }, () => { img.classList.add('bad'); img.title = '照片讀取失敗'; }); });
 };
-U.lightbox = src => {
+U.lightbox = (id, preview) => {
   const d = document.createElement('div'); d.className = 'lightbox';
-  d.innerHTML = '<img alt=""><span>點一下關閉</span>'; d.firstChild.src = src;
-  d.addEventListener('click', () => d.remove()); document.body.appendChild(d);
+  d.innerHTML = '<img alt=""><span class="lb-info">載入原圖中…</span>' +
+    (Api.isLocal() ? '' : '<a class="lb-drive" target="_blank" rel="noopener" href="https://drive.google.com/file/d/' + encodeURIComponent(id) + '/view">在 Google Drive 開啟</a>');
+  const im = d.querySelector('img'), info = d.querySelector('.lb-info'); im.src = preview;
+  if (U._full) U._full(id).then(p => { im.src = 'data:' + p.mime + ';base64,' + p.data; info.textContent = '點一下關閉'; }, e => { info.textContent = '原圖讀取失敗：' + e.message + '（點一下關閉）'; });
+  else info.textContent = '點一下關閉';
+  d.addEventListener('click', e => { if (!e.target.closest('a')) d.remove(); });
+  document.body.appendChild(d);
 };
 document.addEventListener('click', e => {
   const t = e.target.closest && e.target.closest('img.thumb');
-  if (t && t.getAttribute('src')) { e.preventDefault(); e.stopPropagation(); U.lightbox(t.src); }
+  if (t && t.getAttribute('src')) { e.preventDefault(); e.stopPropagation(); U.lightbox(t.dataset.pid, t.src); }
 }, true);

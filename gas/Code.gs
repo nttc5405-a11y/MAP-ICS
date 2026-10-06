@@ -86,7 +86,7 @@ var WRITE_ACTIONS = {
 // 手機掃 QR 加入時還沒有個人權杖，改用「案件編號＋加入碼」驗證
 // 手機端的 field* 與 getMyStatus/getFieldData 不用管理權杖，改在函式內以個人權杖 memberToken 驗證
 var PUBLIC_ACTIONS = { getJoinInfo: 1, joinCase: 1, joinAsTemp: 1, getMyStatus: 1, getFieldData: 1, fieldTaskStatus: 1, fieldReport: 1, fieldPhoto: 1, fieldCasualty: 1,
-  getBoardVersion: 1, getBoardData: 1, getBoardPhoto: 1, listCases: 1, enterCase: 1, getSettings: 1, createCase: 1 };
+  getBoardVersion: 1, getBoardData: 1, getBoardPhoto: 1, getBoardPhotoThumbs: 1, listCases: 1, enterCase: 1, getSettings: 1, createCase: 1 };
 // 只有管理員密碼（權杖）能做的操作；其餘「案件內」的操作，管理員密碼或該案件的驗證碼任一通過即可
 var ADMIN_ONLY = { saveRoster: 1 };   // createCase 在函式內檢查（管理員密碼或建案密碼）
 
@@ -150,10 +150,10 @@ function doPost(e) {
     getJoinInfo: getJoinInfo_, joinCase: joinCase_, joinAsTemp: joinAsTemp_,
     saveTask: saveTask_, deleteTask: deleteTask_, updateTaskStatus: updateTaskStatus_, submitReport: submitReport_,
     getMyStatus: getMyStatus_, getFieldData: getFieldData_, fieldTaskStatus: fieldTaskStatus_, fieldReport: fieldReport_,
-    fieldPhoto: fieldPhoto_, getPhoto: getPhoto_,
+    fieldPhoto: fieldPhoto_, getPhoto: getPhoto_, getPhotoThumbs: getPhotoThumbs_,
     saveCasualty: saveCasualty_, deleteCasualty: deleteCasualty_, splitCasualty: splitCasualty_, updateTransport: updateTransport_,
     fieldCasualty: fieldCasualty_, savePlan: savePlan_, deletePlan: deletePlan_,
-    regenViewCode: regenViewCode_, applyScheme: applyScheme_, uploadPhoto: uploadPhoto_, getBoardVersion: getBoardVersion_, getBoardData: getBoardData_, getBoardPhoto: getBoardPhoto_
+    regenViewCode: regenViewCode_, applyScheme: applyScheme_, uploadPhoto: uploadPhoto_, getBoardVersion: getBoardVersion_, getBoardData: getBoardData_, getBoardPhoto: getBoardPhoto_, getBoardPhotoThumbs: getBoardPhotoThumbs_
   };
   var fn = handlers[req.action];
   if (!fn) return json_({ ok: false, error: '不認得的動作：' + req.action });
@@ -951,24 +951,32 @@ function photoFolder_(c) {
   var root = DriveApp.getFolderById(c.folderId), it = root.getFoldersByName('照片');
   return it.hasNext() ? it.next() : root.createFolder('照片');   // 不開公開連結
 }
+/** 存一張照片；有縮圖（thumb，約 160px）時另存一個小檔，並把小檔 ID 記在原檔的「說明」欄，之後讀縮圖不必讀原圖 */
+function savePhoto_(c, data, mime, thumb, name) {
+  if (mime.indexOf('image/') !== 0) throw new Error('只能上傳圖片');
+  var folder = photoFolder_(c);
+  var file = folder.createFile(Utilities.newBlob(Utilities.base64Decode(data), mime, name));
+  thumb = String(thumb || '');
+  if (thumb && thumb.length < 150000) {
+    try {
+      var tf = folder.createFile(Utilities.newBlob(Utilities.base64Decode(thumb), 'image/jpeg', name.replace(/\.jpg$/, '') + '_s.jpg'));
+      file.setDescription(tf.getId());
+    } catch (e) { /* 縮圖存失敗不影響原圖，之後讀縮圖會改讀原圖 */ }
+  }
+  return { photoId: file.getId() };
+}
 function fieldPhoto_(req) {
   var a = authMember_(req, true);
   var data = String(req.data || ''), mime = String(req.mime || 'image/jpeg');
-  if (mime.indexOf('image/') !== 0) throw new Error('只能上傳圖片');
   if (data.length > 3000000) throw new Error('照片太大，請重拍');
-  var name = a.c.id + '_' + a.m.name + '_' + Utilities.formatDate(new Date(), TZ, 'HHmmss') + '.jpg';
-  var file = photoFolder_(a.c).createFile(Utilities.newBlob(Utilities.base64Decode(data), mime, name));
-  return { photoId: file.getId() };
+  return savePhoto_(a.c, data, mime, req.thumb, a.c.id + '_' + a.m.name + '_' + Utilities.formatDate(new Date(), TZ, 'HHmmss') + '.jpg');
 }
 /** 指揮所（網頁版）上傳照片：存進該案件的「照片」資料夾，回傳檔案 ID */
 function uploadPhoto_(req) {
   var c = openCaseForWrite_(req.caseId);
   var data = String(req.data || ''), mime = String(req.mime || 'image/jpeg');
-  if (mime.indexOf('image/') !== 0) throw new Error('只能上傳圖片');
   if (data.length > 3000000) throw new Error('照片太大，請換較小的檔案');
-  var name = c.id + '_指揮所_' + Utilities.formatDate(new Date(), TZ, 'HHmmss') + '.jpg';
-  var file = photoFolder_(c).createFile(Utilities.newBlob(Utilities.base64Decode(data), mime, name));
-  return { photoId: file.getId() };
+  return savePhoto_(c, data, mime, req.thumb, c.id + '_指揮所_' + Utilities.formatDate(new Date(), TZ, 'HHmmss') + '.jpg');
 }
 /** 指揮所讀取照片（回傳 base64）。只允許讀該案件「照片」資料夾內的檔案 */
 function getPhoto_(req) {
@@ -977,6 +985,24 @@ function getPhoto_(req) {
   while (ps.hasNext()) if (ps.next().getId() === folder.getId()) ok = true;
   if (!ok) throw new Error('找不到照片');
   return { mime: file.getMimeType(), data: Utilities.base64Encode(file.getBlob().getBytes()) };
+}
+/** 一次讀多張縮圖（沒有縮圖的舊照片改回傳原圖）。回傳 { photos: { 照片ID: {mime, data} } }，最多 12 張 */
+function readThumbs_(c, idList) {
+  var folderId = photoFolder_(c).getId(), out = {};
+  var inFolder = function (f) { var ps = f.getParents(); while (ps.hasNext()) if (ps.next().getId() === folderId) return true; return false; };
+  idList.slice(0, 12).forEach(function (id) {
+    try {
+      var file = DriveApp.getFileById(id);
+      if (!inFolder(file)) return;
+      var tid = file.getDescription(), src = file;
+      if (tid) { try { var tf = DriveApp.getFileById(tid); if (inFolder(tf)) src = tf; } catch (e) { /* 改讀原圖 */ } }
+      out[id] = { mime: src.getMimeType(), data: Utilities.base64Encode(src.getBlob().getBytes()) };
+    } catch (e) { /* 這張讀不到就略過，前端顯示讀取失敗 */ }
+  });
+  return { photos: out };
+}
+function getPhotoThumbs_(req) {
+  return readThumbs_(findCase_(req.caseId), ids_(Array.isArray(req.photoIds) ? req.photoIds.join(',') : req.photoIds));
 }
 
 
@@ -1189,6 +1215,14 @@ function getBoardPhoto_(req) {
   });
   if (!used) throw new Error('找不到照片');
   return getPhoto_({ caseId: c.id, photoId: id });
+}
+function getBoardPhotoThumbs_(req) {
+  var c = boardAuth_(req), ss = caseSs_(c), used = {};
+  [['回報', REPORT_FIELDS], ['傷患', CAS_FIELDS]].forEach(function (p) {
+    readAll_(sheet_(ss, p[0]), p[1]).forEach(function (r) { ids_(r.photos).forEach(function (i) { used[i] = 1; }); });
+  });
+  var want = ids_(Array.isArray(req.photoIds) ? req.photoIds.join(',') : req.photoIds).filter(function (i) { return used[i]; });
+  return readThumbs_(c, want);
 }
 
 

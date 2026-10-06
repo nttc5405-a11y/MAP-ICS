@@ -308,3 +308,4 @@ body.logged-out #topbar, body.logged-out #main { visibility: hidden; }
 .lightbox { position: fixed; inset: 0; z-index: 99999; background: rgba(0,0,0,.88); display: flex; align-items: center; justify-content: center; flex-direction: column; cursor: zoom-out; }
 .lightbox img { max-width: 96vw; max-height: 90vh; object-fit: contain; }
 .lightbox span { color: #ccc; font-size: 13px; margin-top: 8px; }
+.lightbox .lb-drive { color: #8ec5ff; font-size: 14px; margin-top: 6px; text-decoration: underline; }
