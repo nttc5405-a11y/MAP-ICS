@@ -6,7 +6,7 @@ const B = {
     const p = new URLSearchParams(location.search);
     B.caseId = p.get('case') || ''; B.view = p.get('view') || '';
     if (!B.caseId || !B.view) { B.msg('這不是有效的看板連結。<br>請向指揮所索取。'); return; }
-    B.initMap();
+    B.initMap(); B.initFold();
     setInterval(B.tick, 1000); B.tick();
     document.addEventListener('keydown', e => { if (e.key === 'f' || e.key === 'F') B.fit(); });
     await B.load();
@@ -15,6 +15,18 @@ const B = {
   },
   async loadMarquee() {
     try { const s = await B.call('getSettings'); U.marquee(document.getElementById('mq-board'), s.marqueeText, s.marqueeSeconds); } catch (e) { /* 不顯示 */ }
+  },
+  /* 左側「傷患／任務／最近回報」可摺疊，狀態記在這個瀏覽器 */
+  initFold() {
+    let st = {}; try { st = JSON.parse(localStorage.getItem('ccs_board_fold') || '{}') || {}; } catch (e) { /* 用預設 */ }
+    document.querySelectorAll('#side section.fold').forEach(s => {
+      if (st[s.dataset.k]) s.classList.add('folded');
+      s.querySelector('h2').addEventListener('click', () => {
+        s.classList.toggle('folded'); st[s.dataset.k] = s.classList.contains('folded') ? 1 : 0;
+        try { localStorage.setItem('ccs_board_fold', JSON.stringify(st)); } catch (e) { /* 不影響使用 */ }
+        if (B.map) setTimeout(() => B.map.invalidateSize(), 0);
+      });
+    });
   },
   msg(html) { const m = document.getElementById('bmsg'); m.innerHTML = html; m.hidden = false; },
   tick() { document.getElementById('clock').textContent = U.now().slice(11); },
@@ -83,9 +95,11 @@ const B = {
     d.casualties.forEach(c => { const p = B.persons(c); CFG.TRIAGE.forEach(x => { t[x.id] += p[x.id]; }); t.total += p.total; if (c.status === '已到院') t.arrived += p.total; else if (c.status === '後送中') t.moving += p.total; });
     document.getElementById('st-cas').innerHTML = '<div class="tri">' + CFG.TRIAGE.map(x => '<div style="background:' + x.color + '"><b>' + t[x.id] + '</b><span>' + x.id + '</span></div>').join('') + '</div>' +
       '<div class="cas-line">共 ' + t.total + ' 人・後送中 ' + t.moving + ' 人・已到院 ' + t.arrived + ' 人</div>';
+    document.getElementById('n-cas').textContent = t.total + ' 人';
     // 任務
     const order = ['需支援', '已派遣', '已接收', '已抵達', '執行中', '完成'];
     const tasks = d.tasks.slice().sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status) || (a.tAssigned < b.tAssigned ? 1 : -1));
+    document.getElementById('n-tasks').textContent = open.length + ' 進行中';
     document.getElementById('st-tasks').innerHTML = tasks.length ? tasks.map(k => {
       const col = CFG.taskColor(k.status), z = d.zones.find(x => x.id === k.zoneId);
       return '<div class="task"><span class="dot" style="background:' + col + '"></span><div class="tt">' + U.esc(k.title) +
@@ -94,6 +108,7 @@ const B = {
     }).join('') : '<div class="empty">尚無任務</div>';
     // 回報
     const reps = d.reports.slice().sort((a, b) => (a.time < b.time ? 1 : -1)).slice(0, 5);
+    document.getElementById('n-reps').textContent = d.reports.length + ' 則';
     document.getElementById('st-reps').innerHTML = reps.length ? reps.map(r =>
       '<div class="rep"><small>' + U.esc(String(r.time).slice(11, 16)) + (r.unit ? '・' + U.esc(r.unit) : '') + '</small>' + U.esc(r.content) + U.thumbs(B.ids(r.photos).slice(0, 3)) + '</div>').join('') : '<div class="empty">尚無回報</div>';
     // 傷患照片：有附照片的傷患，顯示檢傷色與縮圖
