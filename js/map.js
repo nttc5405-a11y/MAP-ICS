@@ -49,7 +49,7 @@ const MapView = {
     m.on('pm:globaleditmodetoggled', e => { this.modes.edit = e.enabled; });
     m.on('pm:globaldragmodetoggled', e => { this.modes.drag = e.enabled; });
     m.on('pm:globalremovalmodetoggled', e => { this.modes.removal = e.enabled; });
-    m.on('pm:globaldrawmodetoggled', e => { this.modes.draw = e.enabled; });
+    m.on('pm:globaldrawmodetoggled', e => { this.modes.draw = e.enabled; m.getContainer().classList.toggle('pm-drawing', !!e.enabled); });   // 繪圖時區域不攔截點擊，才能在既有區域內起筆
 
     // 座標顯示與右鍵選單
     m.on('mousemove', e => this.showCursor(e.latlng));
@@ -329,11 +329,11 @@ const MapView = {
   },
   pick(cb, msg) {
     this.cancelPick();
-    this._pickCb = cb;
+    this._pickCb = cb; this.map.getContainer().classList.add('picking');
     this.map.getContainer().style.cursor = 'crosshair';
     U.toast(msg || '請在地圖上點選位置（按 Esc 取消）');
   },
-  cancelPick() { this._pickCb = null; if (this.map) this.map.getContainer().style.cursor = ''; },
+  cancelPick() { this._pickCb = null; if (this.map) { this.map.getContainer().style.cursor = ''; this.map.getContainer().classList.remove('picking'); } },
   firePick(ll) { const cb = this._pickCb; this.cancelPick(); if (cb) cb(ll); },
 
   clearAll() {

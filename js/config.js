@@ -22,7 +22,11 @@ const CFG = {
     { id: 'photo', name: '正射影像',
       url: 'https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/GoogleMapsCompatible/{z}/{y}/{x}',
       attr: '© 內政部國土測繪中心', maxZoom: 19, maxNativeZoom: 19 },
-    // 魯地圖（rudy.tile.basecamp.tw）的公開圖磚已無法連線，改用同樣有等高線與步道的 OpenTopoMap
+    // 魯地圖原站（rudy.tile.basecamp.tw）已無法連線；改用 Happyman 站台代管的魯地圖圖磚（縮放 6～19 級）
+    { id: 'rudy', name: '魯地圖',
+      url: 'https://tile.happyman.idv.tw/map/rudy/{z}/{x}/{y}.png',
+      attr: '© 魯地圖 Rudy Chung / OpenStreetMap contributors（圖磚由 Happyman 提供）', maxZoom: 19, maxNativeZoom: 19 },
+    // 另備：OpenTopoMap（同樣有等高線與步道）
     { id: 'topo', name: '地形圖（等高線）',
       url: 'https://a.tile.opentopomap.org/{z}/{x}/{y}.png',
       attr: '© OpenTopoMap (CC-BY-SA) / OpenStreetMap', maxZoom: 19, maxNativeZoom: 17 },

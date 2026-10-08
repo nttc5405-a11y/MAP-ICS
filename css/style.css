@@ -309,3 +309,7 @@ body.logged-out #topbar, body.logged-out #main { visibility: hidden; }
 .lightbox img { max-width: 96vw; max-height: 90vh; object-fit: contain; }
 .lightbox span { color: #ccc; font-size: 13px; margin-top: 8px; }
 .lightbox .lb-drive { color: #8ec5ff; font-size: 14px; margin-top: 6px; text-decoration: underline; }
+
+/* 繪圖或選取位置時，區域圖形不攔截點擊（才能在既有區域內起筆、點選位置）。標記與 Geoman 的節點是 marker，不受影響 */
+.leaflet-container.pm-drawing .leaflet-overlay-pane path.leaflet-interactive,
+.leaflet-container.picking .leaflet-overlay-pane path.leaflet-interactive { pointer-events: none !important; }
