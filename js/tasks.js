@@ -50,6 +50,7 @@ const Tasks = {
   },
 
   hydrate() {
+    if (!App.state.cur) return;   // 已登出／尚未開案件時沒有照片可讀
     const cid = App.state.cur.id, many = ids => Api.call('getPhotoThumbs', { caseId: cid, photoIds: ids }).then(r => r.photos), full = id => Api.call('getPhoto', { caseId: cid, photoId: id });
     ['#task-list', '#report-list', '#cas-list'].forEach(s => { const b = U.$(s); if (b) U.hydrateThumbs(b, many, full); });
   },
