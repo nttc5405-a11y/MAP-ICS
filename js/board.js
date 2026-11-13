@@ -103,6 +103,23 @@ const B = {
     });
     r.total = total; return r;
   },
+  /* 各醫院收治狀況：只統計已填「送往醫院」的傷患；依人數多到少排列 */
+  hospitalBox(d) {
+    const hs = {};
+    d.casualties.forEach(c => {
+      const h = String(c.hospital || '').trim(); if (!h) return;
+      const p = B.persons(c), o = hs[h] || (hs[h] = { 紅: 0, 黃: 0, 綠: 0, 黑: 0, total: 0, moving: 0, arrived: 0 });
+      CFG.TRIAGE.forEach(x => { o[x.id] += p[x.id]; }); o.total += p.total;
+      if (c.status === '已到院') o.arrived += p.total; else if (c.status === '後送中') o.moving += p.total;
+    });
+    const names = Object.keys(hs).sort((x, y) => hs[y].total - hs[x].total);
+    if (!names.length) return '';
+    return '<div class="hos-box"><div class="hos-h">🏥 各醫院收治狀況</div>' + names.map(n => {
+      const o = hs[n];
+      return '<div class="hos-row"><div class="hos-n"><b>' + U.esc(n) + '</b><span>共 ' + o.total + ' 人（後送中 ' + o.moving + '・已到院 ' + o.arrived + '）</span></div><div class="hos-t">' +
+        CFG.TRIAGE.filter(x => o[x.id]).map(x => '<i style="background:' + x.color + '">' + x.id + ' ' + o[x.id] + '</i>').join('') + '</div></div>';
+    }).join('') + '</div>';
+  },
   persons(c) {
     if (c.mode === '群體') return B.remaining(c);
     const r = { 紅: 0, 黃: 0, 綠: 0, 黑: 0, total: 1 }; r[c.triage] = 1; return r;
@@ -131,7 +148,7 @@ const B = {
     const t = { 紅: 0, 黃: 0, 綠: 0, 黑: 0, total: 0, arrived: 0, moving: 0 };
     d.casualties.forEach(c => { const p = B.persons(c); CFG.TRIAGE.forEach(x => { t[x.id] += p[x.id]; }); t.total += p.total; if (c.status === '已到院') t.arrived += p.total; else if (c.status === '後送中') t.moving += p.total; });
     document.getElementById('st-cas').innerHTML = '<div class="tri">' + CFG.TRIAGE.map(x => '<div style="background:' + x.color + '"><b>' + t[x.id] + '</b><span>' + x.id + '</span></div>').join('') + '</div>' +
-      '<div class="cas-line">共 ' + t.total + ' 人・後送中 ' + t.moving + ' 人・已到院 ' + t.arrived + ' 人</div>';
+      '<div class="cas-line">共 ' + t.total + ' 人・後送中 ' + t.moving + ' 人・已到院 ' + t.arrived + ' 人</div>' + B.hospitalBox(d);
     document.getElementById('n-cas').textContent = t.total + ' 人';
     // 任務
     const order = ['需支援', '已派遣', '已接收', '已抵達', '執行中', '完成'];

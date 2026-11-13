@@ -589,7 +589,7 @@ const Api = {
           })),
           casualties: lst('casualties', c.id).map(x => ({   // 傷患不含描述、回報者、照片
             id: x.id, mode: x.mode, triage: x.triage, red: x.red, yellow: x.yellow, green: x.green, black: x.black,
-            parentId: x.parentId, status: x.status, coord: x.coord, photos: x.photos
+            parentId: x.parentId, status: x.status, hospital: x.hospital, coord: x.coord, photos: x.photos
           })),
           reports: lst('reports', c.id).slice(-100).map(r => ({
             id: r.id, time: r.time, unit: String(r.reporter || '').replace(/^.*（(.*)）$/, '$1'), content: r.content, coord: r.coord, taskId: r.taskId, photos: r.photos

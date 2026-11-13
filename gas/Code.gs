@@ -1273,7 +1273,7 @@ function getBoardData_(req) {
     }),
     casualties: readAll_(sheet_(ss, '傷患'), CAS_FIELDS).map(casOut_).map(function (x) {
       return { id: x.id, mode: x.mode, triage: x.triage, red: x.red, yellow: x.yellow, green: x.green, black: x.black,
-        parentId: x.parentId, status: x.status, coord: x.coord, photos: x.photos };
+        parentId: x.parentId, status: x.status, hospital: x.hospital, coord: x.coord, photos: x.photos };
     }),
     reports: reports.map(function (r) {
       return { id: r.id, time: r.time, unit: String(r.reporter || '').replace(/^.*（(.*)）$/, '$1'), content: r.content, coord: r.coord, taskId: r.taskId, photos: r.photos };

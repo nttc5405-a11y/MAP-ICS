@@ -32,6 +32,12 @@ body { font-family: 'Noto Sans TC', 'Microsoft JhengHei', system-ui, sans-serif;
 .tri div { color: #fff; border-radius: 10px; text-align: center; padding: 6px 0; }
 .tri b { display: block; font-size: 38px; line-height: 1.1; } .tri span { font-size: 15px; opacity: .9; }
 .cas-line { margin-top: 8px; color: var(--sub); font-size: 17px; }
+.hos-box { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 8px; }
+.hos-h { color: var(--sub); font-size: 16px; margin-bottom: 4px; }
+.hos-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.hos-n { min-width: 0; } .hos-n b { display: block; font-size: 19px; } .hos-n span { color: var(--sub); font-size: 14px; }
+.hos-t { display: flex; gap: 4px; flex: none; flex-wrap: wrap; justify-content: flex-end; }
+.hos-t i { font-style: normal; color: #fff; border-radius: 6px; padding: 2px 8px; font-size: 15px; font-weight: 700; }
 .task { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); }
 .task .dot { width: 14px; height: 14px; border-radius: 50%; flex: none; }
 .task .tt { flex: 1; min-width: 0; font-weight: 500; }
