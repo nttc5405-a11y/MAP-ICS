@@ -6,7 +6,7 @@ const B = {
     const p = new URLSearchParams(location.search);
     B.caseId = p.get('case') || ''; B.view = p.get('view') || '';
     if (!B.caseId || !B.view) { B.msg('這不是有效的看板連結。<br>請向指揮所索取。'); return; }
-    B.initMap(); B.initFold();
+    B.initMap(); B.initFold(); B.initSplit();
     setInterval(B.tick, 1000); B.tick();
     document.addEventListener('keydown', e => { if (e.key === 'f' || e.key === 'F') B.fit(); });
     await B.load();
@@ -27,6 +27,29 @@ const B = {
         if (B.map) setTimeout(() => B.map.invalidateSize(), 0);
       });
     });
+  },
+  /* 左側清單與地圖的寬度比例：拖曳分隔線或按標題列的 ◧◫◨，記在這個瀏覽器；連點分隔線恢復預設 */
+  setSide(pct, save) {
+    pct = Math.max(20, Math.min(80, Math.round(pct)));
+    document.getElementById('side').style.setProperty('--sidew', pct + '%');
+    document.documentElement.style.setProperty('--sidew', pct + '%');
+    if (B.map) B.map.invalidateSize();
+    if (save) { try { localStorage.setItem('ccs_board_side', String(pct)); } catch (e) { /* 不影響使用 */ } }
+  },
+  initSplit() {
+    let saved = 34; try { saved = parseFloat(localStorage.getItem('ccs_board_side')) || 34; } catch (e) { /* 用預設 */ }
+    B.setSide(saved, false);
+    const sp = document.getElementById('splitter'), main = document.getElementById('bmain');
+    const pctAt = x => (x - main.getBoundingClientRect().left) / main.getBoundingClientRect().width * 100;
+    sp.addEventListener('pointerdown', e => {
+      sp.setPointerCapture(e.pointerId); sp.classList.add('drag'); document.body.classList.add('dragging');
+      const move = ev => B.setSide(pctAt(ev.clientX), false);
+      const up = ev => { sp.removeEventListener('pointermove', move); sp.removeEventListener('pointerup', up); sp.classList.remove('drag'); document.body.classList.remove('dragging'); B.setSide(pctAt(ev.clientX), true); };
+      sp.addEventListener('pointermove', move); sp.addEventListener('pointerup', up);
+    });
+    sp.addEventListener('dblclick', () => B.setSide(34, true));
+    document.querySelectorAll('.layout-btns button').forEach(btn => btn.addEventListener('click', () => B.setSide(Number(btn.dataset.pct), true)));
+    window.addEventListener('resize', () => { if (B.map) B.map.invalidateSize(); });
   },
   msg(html) { const m = document.getElementById('bmsg'); m.innerHTML = html; m.hidden = false; },
   tick() { document.getElementById('clock').textContent = U.now().slice(11); },

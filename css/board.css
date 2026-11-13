@@ -12,7 +12,7 @@ body { font-family: 'Noto Sans TC', 'Microsoft JhengHei', system-ui, sans-serif;
 .spacer { flex: 1; }
 .clock { text-align: right; } #clock { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; }
 #bmain { flex: 1; min-height: 0; display: flex; }
-#side { width: 34%; max-width: 560px; min-width: 340px; background: var(--panel); border-right: 2px solid var(--line); display: flex; flex-direction: column; overflow: hidden; }
+#side { width: var(--sidew, 34%); min-width: 300px; background: var(--panel); display: flex; flex-direction: column; overflow: hidden; }
 #side section { padding: 10px 16px; border-bottom: 1px solid var(--line); }
 #side section.fold { flex: 0 1 auto; min-height: 0; overflow-y: auto; }
 #side section.grow { flex: 1 1 auto; }
@@ -84,3 +84,12 @@ body { font-family: 'Noto Sans TC', 'Microsoft JhengHei', system-ui, sans-serif;
 .cas-photos .cp { border-left: 5px solid; padding-left: 6px; }
 .cas-photos .cp small { display: block; color: var(--sub); font-size: 13px; }
 .lightbox .lb-drive { color: #8ec5ff; font-size: 14px; margin-top: 6px; text-decoration: underline; }
+
+/* 左側清單與地圖的分隔線（可拖曳）與版面比例按鈕 */
+#splitter { flex: none; width: 10px; cursor: col-resize; background: var(--line); position: relative; touch-action: none; }
+#splitter::after { content: ''; position: absolute; left: 3px; top: 50%; width: 4px; height: 48px; margin-top: -24px; border-radius: 2px; background: #6b7f91; }
+#splitter:hover, #splitter.drag { background: #3a4d5d; }
+.layout-btns { display: flex; gap: 6px; margin-right: 18px; }
+.layout-btns button { background: #25323e; color: var(--text); border: 1px solid var(--line); border-radius: 8px; font-size: 22px; line-height: 1; padding: 4px 10px; cursor: pointer; }
+.layout-btns button:hover { background: #33465a; }
+body.dragging { user-select: none; cursor: col-resize; }
