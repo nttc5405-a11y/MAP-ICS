@@ -165,7 +165,7 @@ const B = {
     const reps = B.repAll ? sorted : sorted.slice(0, 5);
     document.getElementById('n-reps').textContent = d.reports.length + ' 則';
     document.getElementById('st-reps').innerHTML = reps.length ? reps.map(r =>
-      '<div class="rep"><small>' + U.esc(String(r.time).slice(5, 16)) + (r.unit ? '・' + U.esc(r.unit) : '') + '</small>' + U.esc(r.content) + U.thumbs(B.ids(r.photos).slice(0, 3)) + '</div>').join('') +
+      '<div class="rep"><small>' + U.esc(String(r.time).slice(5, 16)) + (r.unit ? '・' + U.esc(r.unit) : '') + '</small><div class="rep-txt">' + U.esc(r.content) + '</div>' + U.thumbs(B.ids(r.photos).slice(0, 3)) + '</div>').join('') +
       (sorted.length > 5 ? '<button type="button" class="rep-more" id="rep-more">' + (B.repAll ? '▲ 只看最近 5 則' : '▼ 查看全部 ' + sorted.length + ' 則') + '</button>' : '') : '<div class="empty">尚無回報</div>';
     const rm = document.getElementById('rep-more');
     if (rm) rm.onclick = () => { B.repAll = !B.repAll; B.renderStats(); };
