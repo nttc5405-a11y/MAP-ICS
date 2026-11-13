@@ -41,13 +41,22 @@ const B = {
     B.setSide(saved, false);
     const sp = document.getElementById('splitter'), main = document.getElementById('bmain');
     const pctAt = x => (x - main.getBoundingClientRect().left) / main.getBoundingClientRect().width * 100;
+    const mob = () => window.matchMedia('(max-width: 900px)').matches;
+    const setMap = (off, save) => {
+      document.body.classList.toggle('map-off', off);
+      if (save) { try { localStorage.setItem('ccs_board_mapoff', off ? '1' : '0'); } catch (e) { /* 不影響使用 */ } }
+      setTimeout(() => { if (B.map) B.map.invalidateSize(); }, 50);
+    };
+    try { if (localStorage.getItem('ccs_board_mapoff') === '1') setMap(true, false); } catch (e) { /* 預設展開 */ }
+    sp.addEventListener('click', () => { if (mob()) setMap(!document.body.classList.contains('map-off'), true); });
     sp.addEventListener('pointerdown', e => {
+      if (mob()) return;
       sp.setPointerCapture(e.pointerId); sp.classList.add('drag'); document.body.classList.add('dragging');
       const move = ev => B.setSide(pctAt(ev.clientX), false);
       const up = ev => { sp.removeEventListener('pointermove', move); sp.removeEventListener('pointerup', up); sp.classList.remove('drag'); document.body.classList.remove('dragging'); B.setSide(pctAt(ev.clientX), true); };
       sp.addEventListener('pointermove', move); sp.addEventListener('pointerup', up);
     });
-    sp.addEventListener('dblclick', () => B.setSide(34, true));
+    sp.addEventListener('dblclick', () => { if (!mob()) B.setSide(34, true); });
     document.querySelectorAll('.layout-btns button').forEach(btn => btn.addEventListener('click', () => B.setSide(Number(btn.dataset.pct), true)));
     window.addEventListener('resize', () => { if (B.map) B.map.invalidateSize(); });
   },

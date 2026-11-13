@@ -69,6 +69,14 @@ body { font-family: 'Noto Sans TC', 'Microsoft JhengHei', system-ui, sans-serif;
   #bmain { flex-direction: column-reverse; }
   #side { width: 100%; max-width: none; height: 46%; }
   #bhead h1 { font-size: 22px; }
+  /* 手機：分隔線變成一條「地圖收摺／展開」長條 */
+  #splitter { width: auto; height: 40px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 16px; letter-spacing: 1px; background: #3a4d5d; }
+  #splitter::after { display: none; }
+  #splitter::before { content: '🗺 地圖　▲ 點此收摺'; }
+  body.map-off #splitter::before { content: '🗺 地圖已收摺　▼ 點此展開'; }
+  body.map-off #bmap { display: none; }
+  body.map-off #side { flex: 1; height: auto; }
+  .layout-btns { display: none; }
 }
 
 .thumbs { display: inline-flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; }
