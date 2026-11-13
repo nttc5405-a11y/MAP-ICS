@@ -36,18 +36,23 @@ const B = {
     if (B.map) B.map.invalidateSize();
     if (save) { try { localStorage.setItem('ccs_board_side', String(pct)); } catch (e) { /* 不影響使用 */ } }
   },
+  /* 收摺／展開地圖：收摺後，電腦版把傷患、任務、最近回報分三欄占滿螢幕；手機版清單占滿畫面 */
+  setMap(off, save) {
+    document.body.classList.toggle('map-off', off);
+    const t = document.getElementById('map-toggle'); if (t) t.textContent = off ? '🗺 顯示地圖' : '🗺 隱藏地圖';
+    if (save) { try { localStorage.setItem('ccs_board_mapoff', off ? '1' : '0'); } catch (e) { /* 不影響使用 */ } }
+    setTimeout(() => { if (B.map) B.map.invalidateSize(); }, 50);
+  },
   initSplit() {
     let saved = 34; try { saved = parseFloat(localStorage.getItem('ccs_board_side')) || 34; } catch (e) { /* 用預設 */ }
     B.setSide(saved, false);
     const sp = document.getElementById('splitter'), main = document.getElementById('bmain');
     const pctAt = x => (x - main.getBoundingClientRect().left) / main.getBoundingClientRect().width * 100;
     const mob = () => window.matchMedia('(max-width: 900px)').matches;
-    const setMap = (off, save) => {
-      document.body.classList.toggle('map-off', off);
-      if (save) { try { localStorage.setItem('ccs_board_mapoff', off ? '1' : '0'); } catch (e) { /* 不影響使用 */ } }
-      setTimeout(() => { if (B.map) B.map.invalidateSize(); }, 50);
-    };
+    const setMap = B.setMap;
     try { if (localStorage.getItem('ccs_board_mapoff') === '1') setMap(true, false); } catch (e) { /* 預設展開 */ }
+    const mt = document.getElementById('map-toggle');
+    if (mt) mt.addEventListener('click', () => setMap(!document.body.classList.contains('map-off'), true));
     sp.addEventListener('click', () => { if (mob()) setMap(!document.body.classList.contains('map-off'), true); });
     sp.addEventListener('pointerdown', e => {
       if (mob()) return;

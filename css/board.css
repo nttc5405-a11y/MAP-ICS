@@ -90,6 +90,18 @@ body.dragging { user-select: none; cursor: col-resize; }
 #st-reps .rep-more { display: block; width: 100%; margin-top: 8px; padding: 8px; background: #25323e; color: var(--text); border: 1px solid var(--line); border-radius: 8px; font: inherit; font-size: 15px; cursor: pointer; }
 #st-reps .rep-more:hover { background: #2f4050; }
 
+.map-toggle { background: #25323e; color: var(--text); border: 1px solid var(--line); border-radius: 8px; font: inherit; font-size: 16px; padding: 6px 12px; margin-right: 12px; cursor: pointer; white-space: nowrap; }
+.map-toggle:hover { background: #33465a; }
+/* 電腦版收摺地圖：傷患／任務／最近回報分三欄占滿螢幕，各欄自己捲動 */
+@media (min-width: 901px) {
+  body.map-off #bmap, body.map-off #splitter, body.map-off .layout-btns { display: none; }
+  body.map-off #side { width: 100%; max-width: none; flex: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: auto minmax(0, 1fr); }
+  body.map-off #side .stats { grid-column: 1 / -1; }
+  body.map-off #side section.fold { min-height: 0; overflow-y: auto; border-right: 1px solid var(--line); }
+  body.map-off #side section.fold:last-child { border-right: 0; }
+  body.map-off .thumb { width: 140px; height: 140px; }
+}
+
 /* 手機版覆寫一律放最後，才不會被上面同樣權重的規則蓋掉 */
 @media (max-width: 900px) {
   /* 手機：整頁固定一屏高（不整頁捲動）。上：地圖約 36%；下：清單吃剩下的高度、自己捲動 */
@@ -117,6 +129,6 @@ body.dragging { user-select: none; cursor: col-resize; }
   #splitter::before { content: '🗺 地圖　▲ 點此收摺'; }
   body.map-off #splitter::before { content: '🗺 地圖已收摺　▼ 點此展開'; }
   body.map-off #bmap { display: none; }
-  .layout-btns { display: none; }
+  .layout-btns, .map-toggle { display: none; }
 }
 
