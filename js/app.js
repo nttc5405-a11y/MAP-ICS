@@ -303,7 +303,6 @@ const App = {
       '<label>管理權杖（API_TOKEN）<input id="st-token" type="password" autocomplete="off" value="' + U.esc(Api.token()) + '"></label>' +
       '<div><button class="btn small" id="st-test" type="button">測試連線</button> <span id="st-result" class="hint"></span></div>' +
       '<div><button class="btn small" id="st-link" type="button">複製「指揮所登入連結」</button> <span class="hint">加入書籤後，開啟就自動登入（連結內含權杖，請勿分享給別人）</span></div>' : '') +
-      (Cases.canDelete() ? '<hr><div><button class="btn small danger" id="st-delcases" type="button">🗑 批次刪除案件…</button> <span class="hint">一次刪除多個案件的所有資料（試算表、照片），只有管理員看得到</span></div>' : '') +
       (Api.isLocal() ? '<hr><div><button class="btn small danger" id="st-clear" type="button">清空本機試用資料</button> <span class="hint">會刪除這台電腦上所有試用案件</span></div>' : '') +
       '</div>';
     const v = await U.modal({
@@ -332,8 +331,6 @@ const App = {
           const link = App.loginLink(); U.store.set(Api.KEY_TOKEN, old);
           U.copy(link);
         });
-        const dcs = U.$('#st-delcases', el);
-        if (dcs) dcs.addEventListener('click', () => Cases.deleteDialog([]));
         const clr = U.$('#st-clear', el);
         if (clr) clr.addEventListener('click', async () => {
           if (await U.confirm('確定清空本機試用資料？\n所有試用案件與區域都會消失。', '清空', true)) {

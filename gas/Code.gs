@@ -81,14 +81,14 @@ var WRITE_ACTIONS = {
   regenJoinCode: 1, joinCase: 1, joinAsTemp: 1, saveTask: 1, deleteTask: 1, updateTaskStatus: 1, submitReport: 1,
   fieldTaskStatus: 1, fieldReport: 1, fieldPhoto: 1,
   saveCasualty: 1, deleteCasualty: 1, splitCasualty: 1, updateTransport: 1, fieldCasualty: 1,
-  savePlan: 1, deletePlan: 1, regenViewCode: 1, applyScheme: 1, uploadPhoto: 1, deleteCases: 1
+  savePlan: 1, deletePlan: 1, regenViewCode: 1, applyScheme: 1, uploadPhoto: 1
 };
 // 手機掃 QR 加入時還沒有個人權杖，改用「案件編號＋加入碼」驗證
 // 手機端的 field* 與 getMyStatus/getFieldData 不用管理權杖，改在函式內以個人權杖 memberToken 驗證
 var PUBLIC_ACTIONS = { getJoinInfo: 1, joinCase: 1, joinAsTemp: 1, getMyStatus: 1, getFieldData: 1, fieldTaskStatus: 1, fieldReport: 1, fieldPhoto: 1, fieldCasualty: 1,
   getBoardVersion: 1, getBoardData: 1, getBoardPhoto: 1, getBoardPhotoThumbs: 1, listCases: 1, enterCase: 1, getSettings: 1, createCase: 1 };
 // 只有管理員密碼（權杖）能做的操作；其餘「案件內」的操作，管理員密碼或該案件的驗證碼任一通過即可
-var ADMIN_ONLY = { saveRoster: 1, deleteCases: 1 };   // createCase 在函式內檢查（管理員密碼或建案密碼）
+var ADMIN_ONLY = { saveRoster: 1 };   // createCase 在函式內檢查（管理員密碼或建案密碼）
 
 /* =====================================================================
  * 第一次使用：在編輯器選 setup 按「執行」。會建立工作表、根資料夾與管理權杖。
@@ -153,7 +153,7 @@ function doPost(e) {
     fieldPhoto: fieldPhoto_, getPhoto: getPhoto_, getPhotoThumbs: getPhotoThumbs_,
     saveCasualty: saveCasualty_, deleteCasualty: deleteCasualty_, splitCasualty: splitCasualty_, updateTransport: updateTransport_,
     fieldCasualty: fieldCasualty_, savePlan: savePlan_, deletePlan: deletePlan_,
-    regenViewCode: regenViewCode_, deleteCases: deleteCases_, applyScheme: applyScheme_, uploadPhoto: uploadPhoto_, getBoardVersion: getBoardVersion_, getBoardData: getBoardData_, getBoardPhoto: getBoardPhoto_, getBoardPhotoThumbs: getBoardPhotoThumbs_
+    regenViewCode: regenViewCode_, applyScheme: applyScheme_, uploadPhoto: uploadPhoto_, getBoardVersion: getBoardVersion_, getBoardData: getBoardData_, getBoardPhoto: getBoardPhoto_, getBoardPhotoThumbs: getBoardPhotoThumbs_
   };
   var fn = handlers[req.action];
   if (!fn) return json_({ ok: false, error: '不認得的動作：' + req.action });
@@ -1193,26 +1193,53 @@ function boardAuth_(req) {
   return c;
 }
 /* =====================================================================
- * 批次刪除案件（只有管理權杖能做）：把案件的整個資料夾（試算表＋照片）移到 Google Drive 垃圾桶，
- * 並從「案件索引」移除。垃圾桶的東西約 30 天內可在 Drive 還原；之後才會被 Google 永久清除。
+ * 批次刪除案件：只能在「案件索引」試算表的選單裡操作（網頁端沒有這個功能，比較安全）。
+ * 只有能編輯這份試算表的人看得到選單。刪除＝把案件資料夾（試算表＋照片）移到 Google Drive 垃圾桶
+ * （約 30 天內可在 Drive 還原），並從案件索引移除。
+ * 第一次使用：重新整理試算表分頁，上方會出現「案件圖管」選單。
  * ===================================================================== */
-function deleteCases_(req) {
-  var ids = Array.isArray(req.caseIds) ? req.caseIds : ids_(req.caseIds);
-  if (!ids.length) throw new Error('請選擇要刪除的案件');
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu('案件圖管').addItem('批次刪除案件…', 'showDeleteDialog').addToUi();
+}
+function showDeleteDialog() {
+  var html = HtmlService.createHtmlOutput(
+    '<style>body{font:14px sans-serif;margin:12px}label{display:block;padding:3px 0}.r{color:#c62828;font-weight:bold}.c{color:#777}' +
+    '#l{max-height:260px;overflow:auto;border:1px solid #ccc;padding:6px;margin:8px 0}button{padding:6px 12px;margin-right:6px}input[type=text]{width:80px}</style>' +
+    '<div>勾選要刪除的案件。會一併刪除該案的<b>試算表、事件日誌、人員、任務、回報、傷患與所有照片</b>。資料夾會先移到 Drive 垃圾桶，約 30 天內可還原。</div>' +
+    '<div id="l">載入中…</div>' +
+    '<button onclick="sel(1)">全選已結案</button><button onclick="sel(0)">全部取消</button>' +
+    '<p>請輸入「刪除」確認：<input type="text" id="cf"> <button onclick="go()" id="b">刪除所選案件</button></p><div id="m"></div>' +
+    '<script>var L=[];' +
+    'google.script.run.withSuccessHandler(function(a){L=a;var h="";a.forEach(function(k,i){h+="<label><input type=checkbox value="+i+"> "+(k.open?"<span class=r>【進行中】</span>":"<span class=c>【已結案】</span>")+k.id+"　"+k.name.replace(/</g,"&lt;")+"</label>"});document.getElementById("l").innerHTML=h||"目前沒有案件"}).listCasesForDelete();' +
+    'function sel(c){var x=document.querySelectorAll("#l input");for(var i=0;i<x.length;i++)x[i].checked=c&&!L[i].open}' +
+    'function go(){var x=document.querySelectorAll("#l input:checked"),ids=[],run=0;for(var i=0;i<x.length;i++){var k=L[x[i].value];ids.push(k.id);if(k.open)run++}' +
+    'if(!ids.length){alert("請至少勾選一個案件");return}if(document.getElementById("cf").value.trim()!=="刪除"){alert("請在確認欄輸入「刪除」");return}' +
+    'if(run&&!confirm("其中 "+run+" 個案件還在進行中，確定也要刪除嗎？"))return;document.getElementById("b").disabled=true;document.getElementById("m").textContent="刪除中，請稍候…";' +
+    'google.script.run.withSuccessHandler(function(r){alert("已刪除 "+r.deleted.length+" 個案件"+(r.failed.length?"；失敗 "+r.failed.length+" 個："+r.failed.join("；"):""));google.script.host.close()}).withFailureHandler(function(e){alert(e.message);document.getElementById("b").disabled=false}).deleteCasesFromSheet(ids)}' +
+    '</script>').setWidth(560).setHeight(520);
+  SpreadsheetApp.getUi().showModalDialog(html, '批次刪除案件');
+}
+function listCasesForDelete() {
+  return readAll_(indexSheet_(), CASE_FIELDS).map(function (c) { return { id: c.id, name: c.name, open: c.status !== '已結案' }; }).reverse();
+}
+function deleteCasesFromSheet(ids) {
+  if (!Array.isArray(ids) || !ids.length) throw new Error('請選擇要刪除的案件');
   if (ids.length > 50) throw new Error('一次最多刪除 50 個案件');
-  var done = [], failed = [];
-  ids.forEach(function (id) {
-    try {
-      var c = findCase_(String(id));   // 每次重讀：刪列後列號會位移
-      var trashed = 0;
-      try { if (c.folderId) { DriveApp.getFolderById(c.folderId).setTrashed(true); trashed++; } } catch (e) { /* 資料夾已不在 */ }
-      try { if (c.sheetId) { DriveApp.getFileById(c.sheetId).setTrashed(true); trashed++; } } catch (e) { /* 試算表已不在 */ }
-      indexSheet_().deleteRow(c._row);
-      CacheService.getScriptCache().remove('v_' + c.id);
-      done.push(c.id);
-    } catch (e) { failed.push({ id: String(id), error: String(e.message || e) }); }
-  });
-  return { deleted: done, failed: failed };
+  var lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    var done = [], failed = [];
+    ids.forEach(function (id) {
+      try {
+        var c = findCase_(String(id));   // 每次重讀：刪列後列號會位移
+        try { if (c.folderId) DriveApp.getFolderById(c.folderId).setTrashed(true); } catch (e) { /* 資料夾已不在 */ }
+        try { if (c.sheetId) DriveApp.getFileById(c.sheetId).setTrashed(true); } catch (e) { /* 試算表已不在 */ }
+        indexSheet_().deleteRow(c._row);
+        CacheService.getScriptCache().remove('v_' + c.id);
+        done.push(c.id);
+      } catch (e) { failed.push(String(id) + '：' + String(e.message || e)); }
+    });
+    return { deleted: done, failed: failed };
+  } finally { lock.releaseLock(); }
 }
 
 function getBoardVersion_(req) {

@@ -166,18 +166,6 @@ const Api = {
         Api.saveDb(d); return c;
       }
 
-      case 'deleteCases': {
-        const ids = p.caseIds || [], done = [];
-        ids.forEach(id => {
-          const i = d.cases.findIndex(c => c.id === id); if (i < 0) return;
-          d.cases.splice(i, 1);
-          Object.keys(d).forEach(k => { const v = d[k]; if (v && typeof v === 'object' && !Array.isArray(v) && id in v) delete v[id]; });
-          try { Object.keys(localStorage).filter(k => k.indexOf('ccs_photo_') === 0).forEach(k => { try { if (JSON.parse(localStorage.getItem(k)).case === id) localStorage.removeItem(k); } catch (e) { /* 略過 */ } }); } catch (e) { /* 略過 */ }
-          done.push(id);
-        });
-        Api.saveDb(d); return { deleted: done, failed: [] };
-      }
-
       case 'updateCase': {
         const c = findCase(p.caseId); const f = p.fields || {};
         ['name', 'type', 'place', 'lat', 'lng', 'commander', 'note', 'passcode'].forEach(k => { if (k in f) c[k] = f[k]; });
