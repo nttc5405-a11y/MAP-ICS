@@ -399,9 +399,9 @@ U.hydrateThumbs = (root, many, full) => {
   if (full) U._full = full;
   const imgs = U.$$('img.thumb[data-pid]:not([src])', root);
   const need = imgs.map(i => i.dataset.pid).filter((id, i, a) => a.indexOf(id) === i && !U._ph[id]);
-  if (need.length) {
-    const p = many(need);
-    need.forEach(id => {
+  for (let i = 0; i < need.length; i += 12) {   // 後端一次最多回 12 張，多的分批讀
+    const part = need.slice(i, i + 12), p = many(part);
+    part.forEach(id => {
       U._ph[id] = p.then(m => { if (!m || !m[id]) throw new Error('讀不到'); return 'data:' + m[id].mime + ';base64,' + m[id].data; });
       U._ph[id].catch(() => { delete U._ph[id]; });
     });

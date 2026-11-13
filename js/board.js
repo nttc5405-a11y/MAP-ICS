@@ -113,8 +113,8 @@ const B = {
       '<div class="rep"><small>' + U.esc(String(r.time).slice(11, 16)) + (r.unit ? '・' + U.esc(r.unit) : '') + '</small>' + U.esc(r.content) + U.thumbs(B.ids(r.photos).slice(0, 3)) + '</div>').join('') : '<div class="empty">尚無回報</div>';
     // 傷患照片：有附照片的傷患，顯示檢傷色與縮圖
     const cp = d.casualties.filter(c => B.ids(c.photos).length);
-    document.getElementById('st-cas').insertAdjacentHTML('beforeend', cp.length ? '<div class="cas-photos">' + cp.slice(-6).map(c =>
-      '<div class="cp" style="border-color:' + (c.mode === '群體' ? '#888' : CFG.triageColor(c.triage)) + '">' + U.thumbs(B.ids(c.photos).slice(0, 2)) + '<small>' + (c.mode === '群體' ? '多人' : '檢傷' + U.esc(c.triage)) + '・' + U.esc(c.status) + '</small></div>').join('') + '</div>' : '');
+    document.getElementById('st-cas').insertAdjacentHTML('beforeend', cp.length ? '<div class="cas-photos">' + cp.slice(-8).map(c =>
+      '<div class="cp" style="border-color:' + (c.mode === '群體' ? '#888' : CFG.triageColor(c.triage)) + '">' + U.thumbs(B.ids(c.photos).slice(0, 3)) + '<small>' + (c.mode === '群體' ? '多人' : '檢傷' + U.esc(c.triage)) + '・' + U.esc(c.status) + '</small></div>').join('') + '</div>' : '');
     const many = ids => Api.call('getBoardPhotoThumbs', { caseId: B.caseId, viewCode: B.view, photoIds: ids }).then(r => r.photos);
     const full = id => Api.call('getBoardPhoto', { caseId: B.caseId, viewCode: B.view, photoId: id });
     ['st-cas', 'st-reps'].forEach(i => U.hydrateThumbs(document.getElementById(i), many, full));

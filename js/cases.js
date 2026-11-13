@@ -49,12 +49,56 @@ const Cases = {
       (c.status === CFG.STATUS_OPEN
         ? '<button class="btn small danger" id="cc-close">結案</button>'
         : '<button class="btn small primary" id="cc-reopen">重新開啟</button>') +
-      '<button class="btn small" id="cc-leave">離開案件（登出）</button></div></div>';
+      '<button class="btn small" id="cc-leave">離開案件（登出）</button>' +
+      (Cases.canDelete() ? '<button class="btn small danger" id="cc-del">刪除此案件</button>' : '') + '</div></div>';
     U.$('#cc-edit').onclick = () => Cases.openForm(c);
     U.$('#cc-leave').onclick = () => App.leaveCase();
+    const dl = U.$('#cc-del'); if (dl) dl.onclick = () => Cases.deleteDialog([c.id]);
     const cl = U.$('#cc-close'), ro = U.$('#cc-reopen');
     if (cl) cl.onclick = () => Cases.setStatus(CFG.STATUS_CLOSED);
     if (ro) ro.onclick = () => Cases.setStatus(CFG.STATUS_OPEN);
+  },
+
+  /* 批次刪除案件：只給管理員（此瀏覽器有管理權杖）或本機練習模式。preset＝預先勾選的案件編號陣列 */
+  canDelete() { return Api.isLocal() || !!Api.token(); },
+  async deleteDialog(preset) {
+    if (!Cases.canDelete()) { U.toast('只有管理員能刪除案件', 'err'); return; }
+    let list;
+    try { list = await Api.call('listCases'); } catch (e) { U.toast(e.message, 'err'); return; }
+    if (!list.length) { U.toast('目前沒有案件', 'ok'); return; }
+    preset = preset || [];
+    list = list.slice().sort((x, y) => (x.status === CFG.STATUS_OPEN) - (y.status === CFG.STATUS_OPEN) || (x.id < y.id ? 1 : -1));   // 已結案排前面
+    const rows = list.map(k => '<label class="chk"><input type="checkbox" name="dc" value="' + U.esc(k.id) + '"' + (preset.indexOf(k.id) >= 0 ? ' checked' : '') + '> ' +
+      (k.status !== CFG.STATUS_OPEN ? '<span class="hint">【已結案】</span>' : '<b style="color:#c62828">【進行中】</b>') + U.esc(k.id + '　' + k.name) + '</label>').join('');
+    const html = '<div class="form"><div class="hint">勾選要刪除的案件。會一併刪除該案的<b>試算表、事件日誌、人員、任務、回報、傷患與所有照片</b>（整個案件資料夾）。<br>資料夾會先移到 Google Drive 垃圾桶，約 30 天內可在 Drive 還原；之後無法救回。</div>' +
+      '<div><button class="btn small" type="button" id="dc-closed">全選已結案</button> <button class="btn small" type="button" id="dc-none">全部取消</button></div>' +
+      '<div class="check-list" style="max-height:280px">' + rows + '</div>' +
+      '<label>請輸入「刪除」兩個字確認<input id="dc-confirm" type="text" autocomplete="off" placeholder="刪除"></label></div>';
+    const ids = await U.modal({
+      title: '批次刪除案件', html: html, wide: true,
+      onOpen: el => {
+        U.$('#dc-closed', el).onclick = () => U.$$('input[name=dc]', el).forEach(x => { x.checked = /【已結案】/.test(x.closest('label').textContent); });
+        U.$('#dc-none', el).onclick = () => U.$$('input[name=dc]', el).forEach(x => { x.checked = false; });
+      },
+      buttons: [{ text: '取消', value: false }, {
+        text: '刪除所選案件', cls: 'danger',
+        validate: el => {
+          if (!U.$$('input[name=dc]:checked', el).length) { U.toast('請至少勾選一個案件', 'err'); return false; }
+          if (U.$('#dc-confirm', el).value.trim() !== '刪除') { U.toast('請在確認欄輸入「刪除」', 'err'); return false; }
+        },
+        value: el => U.$$('input[name=dc]:checked', el).map(x => x.value)
+      }]
+    });
+    if (!Array.isArray(ids) || !ids.length) return;
+    const running = ids.filter(id => { const k = list.find(x => x.id === id); return k && k.status === CFG.STATUS_OPEN; });
+    if (running.length && !await U.confirm('其中 ' + running.length + ' 個案件還在「進行中」（' + running.join('、') + '）。\n確定也要刪除嗎？', '確定刪除', true)) return;
+    try {
+      const r = await Api.call('deleteCases', { caseIds: ids });
+      const bad = (r.failed || []).map(f => f.id + '：' + f.error);
+      U.toast('已刪除 ' + r.deleted.length + ' 個案件' + (bad.length ? '；失敗 ' + bad.length + ' 個（' + bad.join('；') + '）' : ''), bad.length ? 'err' : 'ok');
+      if (App.state.cur && r.deleted.indexOf(App.state.cur.id) >= 0) App.leaveCase();
+      else if (!document.getElementById('login').hidden) Login.load();
+    } catch (e) { U.toast(e.message, 'err'); }
   },
 
   async setStatus(status) {
