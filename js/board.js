@@ -139,10 +139,14 @@ const B = {
         (k.crew && k.crew.length ? '<small class="crew">人員（' + k.crew.length + '）：' + U.esc(k.crew.join('、')) + '</small>' : '') + '</div><span class="pill" style="background:' + col + '">' + U.esc(k.status) + '</span></div>';
     }).join('') : '<div class="empty">尚無任務</div>';
     // 回報
-    const reps = d.reports.slice().sort((a, b) => (a.time < b.time ? 1 : -1)).slice(0, 5);
+    const sorted = d.reports.slice().sort((a, b) => (a.time < b.time ? 1 : -1));
+    const reps = B.repAll ? sorted : sorted.slice(0, 5);
     document.getElementById('n-reps').textContent = d.reports.length + ' 則';
     document.getElementById('st-reps').innerHTML = reps.length ? reps.map(r =>
-      '<div class="rep"><small>' + U.esc(String(r.time).slice(11, 16)) + (r.unit ? '・' + U.esc(r.unit) : '') + '</small>' + U.esc(r.content) + U.thumbs(B.ids(r.photos).slice(0, 3)) + '</div>').join('') : '<div class="empty">尚無回報</div>';
+      '<div class="rep"><small>' + U.esc(String(r.time).slice(5, 16)) + (r.unit ? '・' + U.esc(r.unit) : '') + '</small>' + U.esc(r.content) + U.thumbs(B.ids(r.photos).slice(0, 3)) + '</div>').join('') +
+      (sorted.length > 5 ? '<button type="button" class="rep-more" id="rep-more">' + (B.repAll ? '▲ 只看最近 5 則' : '▼ 查看全部 ' + sorted.length + ' 則') + '</button>' : '') : '<div class="empty">尚無回報</div>';
+    const rm = document.getElementById('rep-more');
+    if (rm) rm.onclick = () => { B.repAll = !B.repAll; B.renderStats(); };
     // 傷患照片：有附照片的傷患，顯示檢傷色與縮圖
     const cp = d.casualties.filter(c => B.ids(c.photos).length);
     document.getElementById('st-cas').insertAdjacentHTML('beforeend', cp.length ? '<div class="cas-photos">' + cp.slice(-8).map(c =>

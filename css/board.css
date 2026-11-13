@@ -87,6 +87,9 @@ body { font-family: 'Noto Sans TC', 'Microsoft JhengHei', system-ui, sans-serif;
 .layout-btns button:hover { background: #33465a; }
 body.dragging { user-select: none; cursor: col-resize; }
 
+#st-reps .rep-more { display: block; width: 100%; margin-top: 8px; padding: 8px; background: #25323e; color: var(--text); border: 1px solid var(--line); border-radius: 8px; font: inherit; font-size: 15px; cursor: pointer; }
+#st-reps .rep-more:hover { background: #2f4050; }
+
 /* 手機版覆寫一律放最後，才不會被上面同樣權重的規則蓋掉 */
 @media (max-width: 900px) {
   /* 手機：整頁固定一屏高（不整頁捲動）。上：地圖約 36%；下：清單吃剩下的高度、自己捲動 */

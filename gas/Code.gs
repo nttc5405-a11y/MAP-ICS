@@ -1254,7 +1254,7 @@ function getBoardData_(req) {
   var units = readAll_(sheet_(ss, '單位部署'), UNIT_FIELDS).map(stripRow_).map(unitOut_);
   var members = readAll_(sheet_(ss, '案件人員'), MEMBER_FIELDS);
   var uname = function (id) { var n = ''; units.forEach(function (u) { if (u.id === id) n = u.name; }); return n; };
-  var reports = readAll_(sheet_(ss, '回報'), REPORT_FIELDS).slice(-30);
+  var reports = readAll_(sheet_(ss, '回報'), REPORT_FIELDS).slice(-100);   // 看板最多給最近 100 則回報
   return {
     case: { id: c.id, name: c.name, type: c.type, place: c.place, status: c.status, lat: c.lat, lng: c.lng, start: c.start, end: c.end, version: Number(c.version) || 0 },
     zones: readAll_(ss.getSheetByName('區域'), ZONE_FIELDS).map(stripRow_),
